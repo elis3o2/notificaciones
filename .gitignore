@@ -3,3 +3,4 @@ backend/celery*
 backend/venv
 env
 node_modules
+backend/envvars.txt
