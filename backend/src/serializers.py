@@ -360,40 +360,34 @@ class TurnoMergedSerializer(serializers.ModelSerializer):
         Devuelve la lista de mensajes asociados al turno,
         solo si alguno de los msj_* está en 1.
         """
-        if (
-            obj.msj_recordatorio == 1
-            or obj.msj_confirmado == 1
-            or obj.msj_cancelado == 1
-            or obj.msj_reprogramado == 1
-        ):
-            mensajes = (
-                Mensaje.objects.filter(id_turno=obj)
-                .select_related("id_plantilla__id_tipo", "id_estado")
-                .order_by("-fecha_envio")
+        
+        mensajes = (
+             Mensaje.objects.filter(id_turno=obj.id)
+             .select_related("id_plantilla__id_tipo", "id_estado")
+             .order_by("-fecha_envio")
             )
-            return [
-                {
-                    "id": m.id,
-                    "id_mensaje": m.id_mensaje,
-                    "numero": m.numero if m.numero else None,
-                    "fecha_envio": m.fecha_envio if m.fecha_envio else None,
-                    "estado": {
-                        "id": m.id_estado.id if m.id_estado else None,
-                        "significado": m.id_estado.significado if m.id_estado else None,
-                    } if m.id_estado else None,
-                    "plantilla": {
-                        "id": m.id_plantilla.id if m.id_plantilla else None,
-                        "contenido": emoji.emojize(m.id_plantilla.contenido) if m.id_plantilla else None,
-                        "tipo": {
-                            "id": m.id_plantilla.id_tipo.id,
-                            "nombre": m.id_plantilla.id_tipo.nombre,
-                        } if m.id_plantilla.id_tipo else None,
-                    } if m.id_plantilla else None,
-                    "fecha_last_ack": m.fecha_last_ack if m.fecha_last_ack else None,
-                }
-                for m in mensajes
-            ]
-        return []
+        return [
+            {
+                "id": m.id,
+                "id_mensaje": m.id_mensaje,
+                "numero": m.numero if m.numero else None,
+                "fecha_envio": m.fecha_envio if m.fecha_envio else None,
+                "estado": {
+                    "id": m.id_estado.id if m.id_estado else None,
+                    "significado": m.id_estado.significado if m.id_estado else None,
+                } if m.id_estado else None,
+                "plantilla": {
+                    "id": m.id_plantilla.id if m.id_plantilla else None,
+                    "contenido": emoji.emojize(m.id_plantilla.contenido) if m.id_plantilla else None,
+                    "tipo": {
+                        "id": m.id_plantilla.id_tipo.id,
+                        "nombre": m.id_plantilla.id_tipo.nombre,
+                    } if m.id_plantilla.id_tipo else None,
+                } if m.id_plantilla else None,
+                "fecha_last_ack": m.fecha_last_ack if m.fecha_last_ack else None,
+            }
+            for m in mensajes
+        ]
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:

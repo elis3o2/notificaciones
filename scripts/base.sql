@@ -1964,6 +1964,7 @@ CREATE TABLE IF NOT EXISTS last_mod(
     fecha DATETIME NOT NULL
 );
 
+
 CREATE TABLE IF NOT EXISTS estado_turno_espera(
     id INT NOT NULL PRIMARY KEY,
     significado VARCHAR(16) NOT NULL
@@ -1972,5 +1973,17 @@ CREATE TABLE IF NOT EXISTS estado_turno_espera(
 INSERT INTO estado_turno_espera (id, significado)VALUES
 (0, 'ESPERA'),
 (1, 'OTORGADO');
+
+
+
+CREATE TABLE IF NOT EXISTS estudio_requerido(
+    id INT AUTO_INCREMENT NOT NULL PRIMARY KEY,
+    nombre VARCHAR(32) NOT NULL
+);
+
+INSERT INTO estudio_requerido (nombre) VALUES
+("LABORATORIO"),
+("RADIOGRAFÍA"),
+("ECOGRAFÍA");
 
 

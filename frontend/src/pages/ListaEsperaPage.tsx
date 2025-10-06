@@ -313,18 +313,36 @@ const telefonoEstado = (carac: string | null, nro: string | null) => {
   return (
     <Box sx={{ p: 3, maxWidth: 1200, mx: "auto" }}>
       {/* Header */}
-      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 2 }}>
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          mb: 2,
+        }}
+      >
         <Typography variant="h6">Lista de espera</Typography>
 
-        <Button
-          variant="contained"
-          disableElevation
-          onClick={() => navigate(`/add-espera?efector=${selectedEfector?.id}`)}
-          disabled={!selectedEfector}
-        >
-          Agregar
-        </Button>
+        <Box sx={{ display: "flex", gap: 1 }}>
+          <Button
+            variant="contained"
+            disableElevation
+            onClick={() => navigate(`/add-espera?efector=${selectedEfector?.id}`)}
+            disabled={!selectedEfector}
+          >
+            Agregar
+          </Button>
+
+          <Button
+            variant="contained"
+            disableElevation
+            onClick={() => navigate(`/espera-paciente`)}
+          >
+            Buscar Paciente
+          </Button>
+        </Box>
       </Box>
+
 
       {/* Filtros: Efector, Especialidad, Orden */}
       <Grid container spacing={2} alignItems="center" sx={{ mb: 2 }}>

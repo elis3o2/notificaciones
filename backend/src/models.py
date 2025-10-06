@@ -159,8 +159,15 @@ class TurnoEspera(models.Model):
         null=True,
         blank=True
     )
+    estudios_requeridos = models.ManyToManyField(
+        'EstudioRequerido',
+        through='TurnoEsperaEstudio',
+    )
+
+
     class Meta:
         db_table = 'turno_espera'
+        managed = True
 
 
 
@@ -187,6 +194,25 @@ class EfeSerEspPlantilla(models.Model):
         db_table = 'efe_ser_esp_plantilla'
 
 
+
+class EstudioRequerido(models.Model):
+    id = models.IntegerField(primary_key=True)
+    nombre = models.CharField(max_length=32)
+
+    class Meta:
+        managed = False
+        db_table = 'estudio_requerido'
+        
+
+class TurnoEsperaEstudio(models.Model):
+    id = models.IntegerField(primary_key=True)
+    id_turno_espera = models.ForeignKey(
+        TurnoEspera,  models.DO_NOTHING, db_column='id_turno_espera')
+    id_estudio_requerido = models.ForeignKey(
+        EstudioRequerido, models.DO_NOTHING, db_column='id_estudio_requerido')
+    
+    class Meta:
+        db_table = 'turno_espera_estudio'
 
 class CustomUser(AbstractUser):
     efectores = models.ManyToManyField(Efector, related_name="usuarios", blank=True)

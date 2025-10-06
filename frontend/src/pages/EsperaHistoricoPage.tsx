@@ -192,7 +192,6 @@ export default function TurnosEsperaDashboard(): JSX.Element {
       <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
         <Box>
           <Typography variant="h5" fontWeight={700}>Turnos en Espera</Typography>
-          <Typography variant="caption" color="text.secondary">Busca al paciente y confirma para cargar sus turnos</Typography>
         </Box>
 
         <Box display="flex" gap={1} alignItems="center">

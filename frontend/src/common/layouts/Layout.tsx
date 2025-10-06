@@ -25,7 +25,10 @@ if (location.pathname.startsWith("/historico")) {
 if (location.pathname.startsWith("/add-espera")) {
     backTo = "/espera";
   }
-if (location.pathname.startsWith("/espera")) {
+  if (location.pathname.startsWith("/espera-paciente")) {
+    backTo = "/espera";
+  }
+else if (location.pathname.startsWith("/espera")) {
     backTo = "/home";
   }
 
