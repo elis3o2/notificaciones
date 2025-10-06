@@ -5,8 +5,12 @@ from django.contrib.auth.models import AbstractUser
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework import serializers
 from src.models import (Plantilla, EstadoMsj, EstadoTurno,
-                Turno, Mensaje, Efector, Servicio, Especialidad, EfectorPlantilla)
-
+                Turno, Mensaje, Efector, Servicio, Especialidad, EfeSerEspPlantilla,
+                EstadoTurnoEspera, TurnoEspera, EfeSerEsp)
+from src.utils import fetch_paciente, fetch_profesional
+import re
+from django.utils import timezone
+from datetime import datetime, date
 
 class PlantillaSerializer(serializers.ModelSerializer):
     contenido = serializers.SerializerMethodField()
@@ -57,64 +61,271 @@ class ServicioSerializer(serializers.ModelSerializer):
 
 
 class EspecialidadSerializer(serializers.ModelSerializer):
-    servicio = ServicioSerializer(source='id_servicio', read_only=True)
     class Meta:
         model = Especialidad
         fields = '__all__'
 
 
 
-class EfectorPlantillaSerializer(serializers.ModelSerializer):
-    # ligero: solo ids (mantenerlo como ya lo tenías)
+class EfeSerEspSerializer(serializers.ModelSerializer):
     class Meta:
-        model = EfectorPlantilla
-        fields = '__all__'
+        model = EfeSerEsp
+        fields = ['id', 'id_efector', 'id_servicio', 'id_especialidad']
 
-class EfectorPlantillaDetailSerializer(serializers.ModelSerializer):
+
+class EfeSerEspEfectorSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(source="id_efector.id", read_only=True)
+    nombre = serializers.CharField(source="id_efector.nombre", read_only=True)
+
+    class Meta:
+        model = EfeSerEsp
+        fields = ["id", "nombre"]
+
+
+class EfeSerEspCompletoSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField()
     efector = EfectorSerializer(source='id_efector', read_only=True)
     servicio = ServicioSerializer(source='id_servicio', read_only=True)
     especialidad = EspecialidadSerializer(source='id_especialidad', read_only=True)
 
-    plantilla_conf = PlantillaSerializer(read_only=True)
-    plantilla_repr = PlantillaSerializer(read_only=True)
-    plantilla_canc = PlantillaSerializer(read_only=True)
-    plantilla_reco = PlantillaSerializer(read_only=True)
+    class Meta:
+        model = EfeSerEsp
+        fields = ["id", "efector", "servicio", "especialidad"]
+
+class EfeSerEspPlantillaSerializer(serializers.ModelSerializer):
+    efe_ser_esp = EfeSerEspSerializer(source='id_efe_ser_esp', read_only=True)
 
     class Meta:
-        model = EfectorPlantilla
+        model = EfeSerEspPlantilla
+        fields = '__all__'
+
+    def update(self, instance, validated_data):
+        # request está en self.context cuando el serializer lo usa desde un ViewSet
+        request = self.context.get("request")
+        if request is not None:
+            instance._usuario = request.user  # <-- setear antes de guardar
+        # ahora llamar al update normal que hará instance.save() y disparará pre_save
+        return super().update(instance, validated_data)
+
+
+
+class EfeSerEspPlantillaDetailSerializer(serializers.ModelSerializer):
+    especialidad = EspecialidadSerializer(source="id_efe_ser_esp.id_especialidad", read_only=True)
+    id_efector = serializers.SerializerMethodField()
+    id_servicio = serializers.SerializerMethodField()
+
+    # HACEMOS LOS CAMPOS ESCRIBIBLES POR PK (aceptan un entero en el request)
+    plantilla_conf = serializers.PrimaryKeyRelatedField(
+        queryset=Plantilla.objects.all(), required=False, allow_null=True)
+    plantilla_repr = serializers.PrimaryKeyRelatedField(
+        queryset=Plantilla.objects.all(), required=False, allow_null=True)
+    plantilla_canc = serializers.PrimaryKeyRelatedField(
+        queryset=Plantilla.objects.all(), required=False, allow_null=True)
+    plantilla_reco = serializers.PrimaryKeyRelatedField(
+        queryset=Plantilla.objects.all(), required=False, allow_null=True)
+
+    class Meta:
+        model = EfeSerEspPlantilla
+        fields = [
+            "id",
+            "id_efe_ser_esp",
+            "id_efector",
+            "id_servicio",
+            "especialidad",
+            "confirmacion",
+            "plantilla_conf",
+            "reprogramacion",
+            "plantilla_repr",
+            "cancelacion",
+            "plantilla_canc",
+            "recordatorio",
+            "plantilla_reco",
+            "dias_antes",
+        ]
+
+    def get_id_efector(self, obj):
+        return obj.id_efe_ser_esp.id_efector_id if obj.id_efe_ser_esp else None
+
+    def get_id_servicio(self, obj):
+        return obj.id_efe_ser_esp.id_servicio_id if obj.id_efe_ser_esp else None
+
+    def to_representation(self, instance):
+        """
+        Representación para la salida: queremos devolver los objetos 'Plantilla'
+        anidados (igual que antes), no sólo los PKs.
+        """
+        rep = super().to_representation(instance)
+
+        # reemplazamos los PKs por la representación anidada si existe
+        rep["plantilla_conf"] = (
+            PlantillaSerializer(instance.plantilla_conf).data if instance.plantilla_conf else None)
+        rep["plantilla_repr"] = (
+            PlantillaSerializer(instance.plantilla_repr).data if instance.plantilla_repr else None)
+        rep["plantilla_canc"] = (
+            PlantillaSerializer(instance.plantilla_canc).data if instance.plantilla_canc else None)
+        rep["plantilla_reco"] = (
+            PlantillaSerializer(instance.plantilla_reco).data if instance.plantilla_reco else None)
+
+        return rep
+
+
+class EstadoTurnoEsperaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EstadoTurnoEspera
         fields = '__all__'
 
 
-from rest_framework import serializers
-from .models import Turno, Mensaje
+
+class PacienteSerializer(serializers.Serializer):
+    id = serializers.IntegerField(required=False, allow_null=True)
+    nombre = serializers.CharField(required=False, allow_null=True)
+    apellido = serializers.CharField(required=False, allow_null=True)
+    nro_doc = serializers.CharField(required=False, allow_null=True)    
+    carac_telef = serializers.CharField(required=False, allow_null=True)
+    nro_telef = serializers.CharField(required=False, allow_null=True)
+    fecha_nacimiento = serializers.DateField(required=False, allow_null=True)
+    sexo = serializers.CharField(required=False, allow_null=True)
+    nombre_calle = serializers.CharField(required=False, allow_null=True)
+    numero_calle = serializers.IntegerField(required=False, allow_null=True)
+    
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        if rep.get("carac_telef"):
+            rep["carac_telef"] = str(rep["carac_telef"]).replace(" ", "")
+        if rep.get("nro_telef"):
+            rep["nro_telef"] = str(rep["nro_telef"]).replace(" ", "")
+        return rep
+
+class ProfesionalSerializer(serializers.Serializer):
+    id = serializers.IntegerField(required=False, allow_null=True)
+    apellido = serializers.CharField(required=False, allow_null=True)
+    nombre = serializers.CharField(required=False, allow_null=True)
 
 
+class TurnoEsperaSerializer(serializers.ModelSerializer):
+    estado = EstadoTurnoEsperaSerializer(source='id_estado', read_only=True)
+    efector =  EfectorSerializer(source='id_efe_ser_esp.id_efector', read_only=True)
+    servicio = ServicioSerializer(source='id_efe_ser_esp.id_servicio', read_only=True)
+    especialidad = EspecialidadSerializer(source='id_efe_ser_esp.id_especialidad', read_only=True)
+    efector_solicitante = EfectorSerializer(source='id_efector_solicitante', read_only=True)
+    # campos adicionales para paciente y profesional
+    paciente = serializers.SerializerMethodField()
+    profesional_solicitante = serializers.SerializerMethodField()
 
+    class Meta:
+        model = TurnoEspera
+        fields = ["id", "efector", "servicio", "especialidad", "efector_solicitante",
+                  "paciente", "profesional_solicitante", "estado", "prioridad",
+                  "usuario_cierre", "usuario_creacion", "fecha_hora_creacion", 
+                  "fecha_hora_cierre"]   # incluye los id_..., más los serializer fields
+
+    def get_paciente(self, obj):
+        try:
+            data = fetch_paciente(id_persona=obj.id_paciente)
+            if data:
+                # devolvemos un único paciente (porque es por id)
+                return PacienteSerializer(data[0]).data
+            return None
+        except Exception:
+            return None
+
+    def get_profesional_solicitante(self, obj):
+        try:
+            data = fetch_profesional(id_prof=obj.id_profesional_solicitante)
+            if data:
+                # igual que paciente, es único si buscamos por id
+                return ProfesionalSerializer(data[0]).data
+            return None
+        except Exception:
+            return None
+
+
+class TurnoEsperaCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TurnoEspera
+        fields = (
+            "id_efe_ser_esp",
+            "id_efector_solicitante",
+            "id_profesional_solicitante",
+            "id_paciente",
+            "prioridad",
+        )
+        read_only_fields = ("usuario_creacion", "fecha_hora_creacion", "id_estado")
+
+    def create(self, validated_data):
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+
+        # Setear usuario y fecha/hora automáticamente
+        validated_data["usuario_creacion"] = user
+        validated_data["fecha_hora_creacion"] = timezone.now()
+
+        # Setear estado inicial por defecto (ejemplo: pk=0)
+        validated_data["id_estado"] = EstadoTurnoEspera.objects.get(pk=0)
+
+        return super().create(validated_data)
+
+
+class TurnoEsperaCloseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TurnoEspera
+        fields = ["id"]  # solo necesitamos que venga el id
+
+    def update(self, instance, validated_data):
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+
+        close = EstadoTurnoEspera.objects.get(pk=1)
+        instance.id_estado = close
+        instance.fecha_hora_cierre = timezone.now()
+        instance.usuario_cierre = user
+        instance.save(update_fields=["id_estado", "fecha_hora_cierre", "usuario_cierre"])
+
+        return instance
+
+
+from datetime import datetime, date
 
 class HistoricoPacienteSerializer(serializers.Serializer):
     idturno = serializers.IntegerField()
     fecha_hora_mdf = serializers.DateTimeField(allow_null=True, required=False)
+
     estado = serializers.CharField(allow_null=True, allow_blank=True, required=False)
     paciente_nombre = serializers.CharField(allow_null=True, allow_blank=True, required=False)
     paciente_apellido = serializers.CharField(allow_null=True, allow_blank=True, required=False)
     nro_doc = serializers.CharField(allow_null=True, allow_blank=True, required=False)
     nombre_profesional = serializers.CharField(allow_null=True, allow_blank=True, required=False)
     apellido_profesional = serializers.CharField(allow_null=True, allow_blank=True, required=False)
-    fecha = serializers.DateField(allow_null=True, required=False)
+
+    # Campo fecha modificado para truncar hora
+    fecha = serializers.DateField(format="%Y-%m-%d", allow_null=True, required=False)
+
     hora = serializers.TimeField(allow_null=True, required=False)
     efector = serializers.CharField(allow_null=True, allow_blank=True, required=False)
     servicio = serializers.CharField(allow_null=True, allow_blank=True, required=False)
     especialidad = serializers.CharField(allow_null=True, allow_blank=True, required=False)
 
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
 
+        val = rep.get("fecha")
+        if val:
+            try:
+                # Si viene con hora, convertir a date
+                if isinstance(val, str):
+                    val_dt = datetime.fromisoformat(val)
+                    rep["fecha"] = val_dt.date()
+                elif isinstance(val, datetime):
+                    rep["fecha"] = val.date()
+            except Exception:
+                rep["fecha"] = val.split(" ")[0]
 
+        return rep
 
 
 
 class TurnoMergedSerializer(serializers.ModelSerializer):
-    efector = EfectorSerializer(source="id_efector", read_only=True)
-    servicio = ServicioSerializer(source="id_servicio", read_only=True)
-    especialidad = EspecialidadSerializer(source="id_especialidad", read_only=True)
+    efe_ser_esp  = EfeSerEspCompletoSerializer(source="id_efe_ser_esp", read_only=True)
 
     msj_recordatorio = serializers.IntegerField(read_only=True, allow_null=True)
     msj_confirmado = serializers.IntegerField(read_only=True, allow_null=True)
@@ -138,10 +349,10 @@ class TurnoMergedSerializer(serializers.ModelSerializer):
         fields = [
             "id", "fecha", "hora", "estado",
             "msj_recordatorio", "msj_confirmado", "msj_cancelado", "msj_reprogramado",
-            "efector", "servicio", "especialidad",
+            "efe_ser_esp",
             "paciente_nombre", "paciente_apellido", "paciente_dni",
             "profesional_nombre", "profesional_apellido",
-            "mensaje_asociado",  # 👈 acá lo agregamos
+            "mensaje_asociado",  
         ]
 
     def get_mensaje_asociado(self, obj):

@@ -1,15 +1,16 @@
 import requests
 import emoji
 from decouple import config
-from src.models import EfectorPlantilla, Mensaje
-from src.serializers import PlantillaSerializer
+from src.models import EfeSerEspPlantilla, Mensaje
 import re
 import logging
 logger = logging.getLogger(__name__)
-# Función para enviar mensajes WhatsApp
 from rest_framework.response import Response
 from rest_framework import status
 from django.utils.timezone import now
+from django.db import connections, DatabaseError
+
+
 
 def get_actual_state(mensaje_id, id_mensaje_externo, numero):
     """
@@ -84,12 +85,10 @@ def enviar_whatsapp(numero, mensaje):
             status=status.HTTP_502_BAD_GATEWAY
         )
     
-def check_turno(efector, servicio, especialidad, estado):
+def check_turno(efe_ser_esp, estado):
     try:
-        turno = EfectorPlantilla.objects.filter(
-            id_efector=efector,
-            id_servicio=servicio,
-            id_especialidad=especialidad
+        turno = EfeSerEspPlantilla.objects.filter(
+            id_efe_ser_esp=efe_ser_esp,
         ).first()
         
         if not turno:
@@ -97,7 +96,7 @@ def check_turno(efector, servicio, especialidad, estado):
         
         # Mapear estado → tipo y campo de plantilla
         mapping = {
-            0: ("confirmacion", "plantilla_conf"),
+            1: ("confirmacion", "plantilla_conf"),
             2: ("cancelacion", "plantilla_canc"),
             3: ("reprogramacion", "plantilla_repr"),
         }
@@ -133,5 +132,110 @@ def format_plantilla(contenido, valores):
     return re.sub(r'{(\w+)}', replace_match, contenido)
 
 
+def fetch_paciente(id_persona=None, dni=None):
+    """
+    Retorna lista de dicts con pacientes (posiblemente vacía).
+    """
+    if not id_persona and not dni:
+        return []
 
+    if id_persona:
+        where = "WHERE per.id_persona = ?"
+        params = (id_persona,)
+    else:
+        where = "WHERE per.nro_doc = ?"
+        params = (dni,)
+
+    sql = f"""
+        SELECT
+            per.id_persona AS id,
+            per.nro_doc,
+            TRIM(per.nombre_per) AS nombre,
+            TRIM(per.apellido)    AS apellido,
+            per.carac_telef,
+            per.nro_telef,
+            per.fe_naci AS fecha_nacimiento,
+            per.sexo,
+            TRIM(calle.nom_calle) AS nombre_calle,
+            per.numero_dec AS numero_calle
+        FROM v_personas per
+        LEFT JOIN v_calles calle ON calle.cod_calle = per.cod_calle_dec
+        {where}
+    """
+
+    try:
+        with connections['informix'].cursor() as cur:
+            cur.execute(sql, params)
+            rows = cur.fetchall()
+            if not rows:
+                return []
+
+            desc = cur.description or []
+            cols = [str(c[0]).lower() for c in desc]
+            result = []
+            for r in rows:
+                result.append({ cols[i]: r[i] for i in range(len(r)) })
+            return result
+
+    except DatabaseError:
+        logger.exception("Error consultando Informix (paciente list)")
+        raise
+
+
+def fetch_profesional(id_prof=None, id_efector=None, nombre=None, apellido=None):
+    """
+    Retorna lista de dicts con profesionales que coincidan (posiblemente vacía).
+    Si id_prof está provisto busca por idpersonal; si no, usa id_efector + filtros.
+    """
+    params = []
+    if id_prof:
+        sql = """
+            SELECT DISTINCT
+                p.idpersonal AS id,
+                TRIM(p.apellido) AS apellido,
+                TRIM(p.nombre)   AS nombre
+            FROM personal p
+            WHERE p.idpersonal = ?
+        """
+        params = [id_prof]
+    else:
+        if not id_efector:
+            return []
+        sql = """
+            SELECT DISTINCT
+                p.idpersonal AS id,
+                TRIM(p.apellido) AS apellido,
+                TRIM(p.nombre)   AS nombre
+            FROM personal p
+            JOIN personalefector pe ON p.idpersonal = pe.idpersonal
+            WHERE pe.idefector = ?
+              AND p.estado = 1
+        """
+        params = [id_efector]
+        if nombre and nombre.strip():
+            sql += " AND p.nombre LIKE ?"
+            params.append(nombre.strip().upper() + '%')
+        if apellido and apellido.strip():
+            sql += " AND p.apellido LIKE ?"
+            params.append(apellido.strip().upper() + '%')
+
+        sql += " ORDER BY apellido, nombre"
+
+    try:
+        with connections['informix'].cursor() as cur:
+            cur.execute(sql, tuple(params))
+            rows = cur.fetchall()
+            if not rows:
+                return []
+
+            desc = cur.description or []
+            cols = [str(c[0]).lower() for c in desc]
+            result = []
+            for r in rows:
+                result.append({ cols[i]: r[i] for i in range(len(r)) })
+            return result
+
+    except DatabaseError:
+        logger.exception("Error consultando Informix (profesional list)")
+        raise
 

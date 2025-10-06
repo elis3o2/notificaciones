@@ -1,30 +1,5 @@
 import http from '../../common/api/client'
-import type { Efector, EfectorPlantilla, Especialidad, Servicio, Turno, TurnoExtend, EstadoMsj } from './types'
-
-export const getEfectoresAll = (): Promise<Efector[]> =>
-  http.get<Efector[]>(`efectores/`).then(res => res.data);
-
-export const getEfectorById = (id: number): Promise<Efector> =>
-  http.get<Efector>(`efectores/${id}/`).then(res => res.data);
-
-export const getServiciosAll = (): Promise<Servicio[]> =>
-  http.get<Servicio[]>(`servicios/`).then(res => res.data);
-
-export const getEspecialidadesAll = (): Promise<Especialidad[]> =>
-  http.get<Especialidad[]>(`especialidades/`).then(res => res.data);
-
-// existing endpoints you already had
-export const getPlantillaByEfector = (id: number): Promise<EfectorPlantilla[]> =>
-  http.get<EfectorPlantilla[]>(`efector_plantilla/buscar/?id_efector=${id}`).then(res => res.data);
-
-export const updateEfectorPlantilla = (id: number, data: EfectorPlantilla): Promise<EfectorPlantilla> =>
-  http.patch<EfectorPlantilla>(`efector_plantilla/${id}/`, data).then(res => res.data);
-
-export const getPlantillaByEfectorServicio = (id_e: number, id_s: number): Promise<EfectorPlantilla[]> =>
-  http.get<EfectorPlantilla[]>(`efector_plantilla/detalle/?id_efector=${id_e}&id_servicio=${id_s}`).then(res => res.data);
-
-export const getServicioByEfector = (id: number): Promise<Servicio[]> =>
-  http.get<Servicio[]>(`efector_plantilla/servicios/?id_efector=${id}`).then(res => res.data);
+import type { Turno, TurnoEspera, TurnoExtend, EstadoMsj, EstadoTurno } from './types';
 
 export const getTurnosAll = (
   id_servicio?: number,
@@ -41,24 +16,9 @@ export const getTurnosAll = (
   if (params.length > 0) {
     url += `?${params.join("&")}`;
   }
-
   return http.get<Turno[]>(url).then(res => res.data);
 };
 
-/**
- * New: devuelve todas las combinaciones EfectorPlantilla
- * (usa /efector_plantilla/ list endpoint si está disponible; si no,
- * intentá usar /efector_plantilla/buscar/ sin params)
- */
-export const getEfectorPlantillasAll = (): Promise<EfectorPlantilla[]> =>
-  http.get<EfectorPlantilla[]>(`efector_plantilla/`).then(res => res.data)
-  .catch(() => http.get<EfectorPlantilla[]>(`efector_plantilla/buscar/`).then(res => res.data));
-
-/**
- * New: llama al endpoint /turnos/count/ que añadiste en backend.
- * Acepta arrays y construye params CSV. Devuelve un número (count).
- */
-// types (exportalo si lo usás en varios lados)
 export type TurnosCountResult = {
   count: number;
   msj_recordatorio: number;
@@ -104,7 +64,6 @@ export const getTurnosCount = (
     };
   });
 };
-
 /**
  * Fallback: cuando no existe /turnos/count/ o falla, combinamos llamadas a getTurnosAll
  * y deduplicamos por id.
@@ -167,3 +126,26 @@ export const getSignificado = async (id: number): Promise<EstadoMsj> => {
 export const getHistoricoTurno = (dni:number) => {
   return http.get(`get_historico/?dni=${dni}`).then(res => res.data);
 }
+
+
+export const getTurnoEsperaAbierto = (id: number) :Promise<TurnoEspera[]> =>{
+  return http.get<TurnoEspera[]>(`turno_espera/espera/?id_efector=${id}`).then(res => res.data);
+}
+
+
+export const postTurnoEspera = (id_efe_ser_esp: number, id_profesional_solicitante: number,
+  id_efector_solicitante: number,id_paciente:number, prioridad: number ) => {
+  
+    return http.post("turno_espera/", {id_efe_ser_esp,id_profesional_solicitante,
+    id_efector_solicitante,id_paciente, prioridad,});
+};
+
+
+export const CloseTurnoEspera = (id: number) => {
+  return http.post(`turno_espera/close/?id=${id}`).then(res => res.data);
+}
+
+export const getTurnoEsperaById= (id: number) => {
+  return http.get(`turno_espera/paciente/?id=${id}`).then(res => res.data);
+}
+

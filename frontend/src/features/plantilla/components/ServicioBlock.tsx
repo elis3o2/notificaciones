@@ -1,4 +1,7 @@
-import type { Servicio, Efector, EfectorPlantillaExtend } from "../types";
+import type { Servicio, Efector, Especialidad } from "../../efe_ser_esp/types";
+import type { EfeSerEspPlantillaExtend } from "../types";
+import type { EfeSerEspPlantilla } from "../types";
+import { getPlantillaByEfectorServicio } from "../api";
 import {
   Box,
   Typography,
@@ -8,8 +11,7 @@ import {
   Collapse,
   Stack,
 } from "@mui/material";
-import type { Setter, AlertSeverity } from "../../../common/types";
-import { getPlantillaByEfectorServicio } from "../api";
+import type { Setter, AlertSeverity } from "../../../common/types"; 
 import SendAll from "./SendAll";
 
 type Props = {
@@ -17,18 +19,18 @@ type Props = {
   servicios: Servicio[];
   servicioSeleccionado: Servicio[];
   setServicioSeleccionado: Setter<Servicio[]>;
-  especialidades: EfectorPlantillaExtend[];
-  setEspecialidades: Setter<EfectorPlantillaExtend[]>;
-  efectorEspecialidades: Record<number, Record<number, EfectorPlantillaExtend[]>>;
-  setEfectorEspecialidades: Setter<Record<number, Record<number, EfectorPlantillaExtend[]>>>;
+  especialidades: EfeSerEspPlantillaExtend[];
+  setEspecialidades: Setter<EfeSerEspPlantillaExtend[]>;
+  efecServEspecialidades: Record<number, Record<number, EfeSerEspPlantillaExtend[]>>;
+  setEfecServEspecialidades: Setter<Record<number, Record<number, EfeSerEspPlantillaExtend[]>>>;
   servicioEfectorActual: Record<number, number[]>; // servicio_id -> [efector_id...]
   setServicioEfectorActual: Setter<Record<number, number[]>>;
   confirmField: "confirmacion" | "reprogramacion" | "cancelacion" | "recordatorio";
   setConfirmField: Setter<"confirmacion" | "reprogramacion" | "cancelacion" | "recordatorio">;
   confirmValue: 0 | 1;
   setConfirmValue: Setter<0 | 1>;
-  confirmEspecialidades: EfectorPlantillaExtend[];
-  setConfirmEspecialidades: Setter<EfectorPlantillaExtend[]>;
+  confirmEspecialidades: EfeSerEspPlantillaExtend[];
+  setConfirmEspecialidades: Setter<EfeSerEspPlantillaExtend[]>;
   setAlertOpen: Setter<boolean>;
   setAlertMsg: Setter<string>;
   setAlertSeverity: Setter<AlertSeverity>;
@@ -43,8 +45,8 @@ const Servicios = ({
   setServicioSeleccionado,
   especialidades,
   setEspecialidades,
-  efectorEspecialidades,
-  setEfectorEspecialidades,
+  efecServEspecialidades,
+  setEfecServEspecialidades,
   servicioEfectorActual,
   setServicioEfectorActual,
   confirmField,
@@ -64,25 +66,21 @@ const Servicios = ({
 
   /**
    * Devuelve todas las especialidades para las combinaciones (efectorSeleccionado x servicios)
-   * Usa servicioEfectorActual para ser más eficiente.
+   * Usa servicioEfectorActual para ser más eficiente y cache efecServEspecialidades.
    */
-  const allEspecialidadesToChange = async (): Promise<EfectorPlantillaExtend[]> => {
+  const allEspecialidadesToChange = async (): Promise<EfeSerEspPlantillaExtend[]> => {
     if (efectorSeleccionado.length === 0 || servicios.length === 0) return [];
 
-    const listaMap = new Map<number, EfectorPlantillaExtend>();
-
-    // combos que faltan (efId-servId)
+    const listaMap = new Map<number, EfeSerEspPlantillaExtend>();
     const missingCombos: Array<{ efId: number; servId: number }> = [];
 
-    // Recorremos cada servicio y consultamos qué efectores debemos considerar
     for (const serv of servicios) {
       const servId = serv.id;
-      // si existe mapping en servicioEfectorActual, lo restringimos a los efectores actualmente seleccionados
-      const mapped = servicioEfectorActual[servId];
-      const efIdsToCheck = mapped.filter(id => selectedEfIds.has(id))
+      const mapped: number[] = servicioEfectorActual[servId] ?? [];
+      const efIdsToCheck = mapped.filter(id => selectedEfIds.has(id));
 
       for (const efId of efIdsToCheck) {
-        const cached = efectorEspecialidades?.[efId]?.[servId];
+        const cached = efecServEspecialidades?.[efId]?.[servId];
         if (cached && cached.length > 0) {
           for (const es of cached) listaMap.set(es.id, es);
         } else {
@@ -95,21 +93,19 @@ const Servicios = ({
       return Array.from(listaMap.values());
     }
 
-
-    // Lanzamos fetchs en paralelo
     const fetches = missingCombos.map(async ({ efId, servId }) => {
       try {
         const data = await getPlantillaByEfectorServicio(efId, servId);
         return { efId, servId, data, error: null as any };
       } catch (error) {
-        return { efId, servId, data: [] as EfectorPlantillaExtend[], error };
+        return { efId, servId, data: [] as EfeSerEspPlantillaExtend[], error };
       }
     });
 
     const results = await Promise.all(fetches);
 
-    // Recolectar por efector para actualización de cache
-    const updatesByEf: Record<number, Record<number, EfectorPlantillaExtend[]>> = {};
+    // recolectar updates por efector y llenar listaMap
+    const updatesByEf: Record<number, Record<number, EfeSerEspPlantillaExtend[]>> = {};
     const failed: Array<{ efId: number; servId: number; error: any }> = [];
 
     for (const r of results) {
@@ -125,9 +121,9 @@ const Servicios = ({
       };
     }
 
-    // Actualizamos la cache en bloque (inmutable)
-    if (Object.keys(updatesByEf).length > 0) {
-      setEfectorEspecialidades(prev => {
+    // actualizar cache en bloque (si el setter existe)
+    if (typeof setEfecServEspecialidades === "function" && Object.keys(updatesByEf).length > 0) {
+      setEfecServEspecialidades(prev => {
         const next = { ...prev };
         for (const [efIdStr, svcMap] of Object.entries(updatesByEf)) {
           const efId = Number(efIdStr);
@@ -138,6 +134,8 @@ const Servicios = ({
         }
         return next;
       });
+    } else if (Object.keys(updatesByEf).length > 0) {
+      console.error("setEfecServEspecialidades no es función:", setEfecServEspecialidades);
     }
 
     if (failed.length > 0) {
@@ -150,90 +148,106 @@ const Servicios = ({
     return Array.from(listaMap.values());
   };
 
-  /** CLICK SERVICIO → muestra especialidades (usa servicioEfectorActual para ser eficiente) */
+  /** CLICK SERVICIO → muestra especialidades (usa servicioEfectorActual y efecServEspecialidades) */
   const handleServicioClick = async (servicio: Servicio) => {
     if (efectorSeleccionado.length === 0) return;
 
-    // toggle deselect
+    // toggle deselect: si ya estaba seleccionado lo removemos y ocultamos sus especialidades
     if (servicioSeleccionado.some(s => s.id === servicio.id)) {
-      setEspecialidades(prev => prev.filter(es => es.id_servicio !== servicio.id));
+
+      setEspecialidades(prev => prev.filter(es => es.id_servicio != servicio.id));
       setServicioSeleccionado(prev => prev.filter(s => s.id !== servicio.id));
       return;
     }
 
     const servId = servicio.id;
-    // Determinar qué efectores usar para este servicio: preferimos servicioEfectorActual si está, restringido a los efectores seleccionados
-    const mapped = servicioEfectorActual?.[servId];
-    const efIds = (mapped ? mapped.filter(id => selectedEfIds.has(id)) : Array.from(selectedEfIds));
 
-    // Si no había mapping, guardamos el mapping actual para optimizar futuras llamadas
-    if (!mapped) {
-      setServicioEfectorActual(prev => ({ ...(prev || {}), [servId]: Array.from(selectedEfIds) }));
-    }
+    // 1) obtener efectores asociados al servicio pero solo los seleccionados
+    const efIdsForService: number[] = (servicioEfectorActual[servId] ?? []).filter(id => selectedEfIds.has(id));
 
-    // revisar cache para esos efIds
-    const cachedCombined: EfectorPlantilla[] = [];
+
+    // 2) recopilar plantillas desde la cache y detectar faltantes
+    const cachedPlantillas: EfeSerEspPlantillaExtend[] = [];
     const missingEfIds: number[] = [];
 
-    for (const efId of efIds) {
-      const cached = efectorEspecialidades?.[efId]?.[servId];
-      if (cached && cached.length > 0) {
-        cached.forEach(es => cachedCombined.push(es));
+    for (const efId of efIdsForService) {
+      const cachedAll = efecServEspecialidades?.[efId]?.[servId];
+      if (cachedAll && cachedAll.length > 0) {
+        cachedPlantillas.push(...cachedAll);
       } else {
         missingEfIds.push(efId);
       }
     }
 
-    // si hay cache parcialmente o completamente, añadimos deduplicado
-    if (cachedCombined.length > 0 && missingEfIds.length === 0) {
-      const map = new Map<number, EfectorPlantilla>();
-      // prev + cachedCombined dedupe
-      for (const p of especialidades) map.set(p.id, p);
-      for (const c of cachedCombined) map.set(c.id, c);
-      setEspecialidades(Array.from(map.values()));
+    // 3) Si no hay faltantes usamos la cache y terminamos
+    if (missingEfIds.length === 0) {
+      // deduplicar plantillas por id
+      const dedup = new Map<number, EfeSerEspPlantillaExtend>();
+      for (const p of cachedPlantillas) dedup.set(p.id, p);
+
+      // extraer especialidades deduplicadas
+      const espMap = new Map<number, EfeSerEspPlantillaExtend>();
+      for (const p of dedup.values()) espMap.set(p.especialidad.id, p);
+
+      // combinar con prev (evitar duplicados)
+      const prevMap = new Map<number, EfeSerEspPlantillaExtend>(especialidades.map(e => [e.id, e]));
+      for (const [id, esp] of espMap) prevMap.set(id, esp);
+
+      setEspecialidades(Array.from(prevMap.values()));
       setServicioSeleccionado(prev => [...prev, servicio]);
       return;
     }
 
-    // fetch solo para missingEfIds
+    // 4) fetch solo para los effectores faltantes y luego actualizar cache
     try {
       const fetches = missingEfIds.map(async efId => {
         try {
           const data = await getPlantillaByEfectorServicio(efId, servId);
           return { efId, data, error: null as any };
         } catch (error) {
-          return { efId, data: [] as EfectorPlantilla[], error };
+          return { efId, data: [] as EfeSerEspPlantillaExtend[], error };
         }
       });
 
       const results = await Promise.all(fetches);
 
-      // actualizar cache por efector (inmutable)
-      setEfectorEspecialidades(prev => {
-        const next = { ...prev };
-        for (const r of results) {
-          next[r.efId] = {
-            ...(next[r.efId] || {}),
-            [servId]: r.data,
-          };
-        }
-        return next;
-      });
+      // actualizar cache por efector (inmutable) — protegemos con typeof
+      if (typeof setEfecServEspecialidades === "function") {
+        setEfecServEspecialidades(prev => {
+          const next = { ...prev };
+          for (const r of results) {
+            next[r.efId] = {
+              ...(next[r.efId] || {}),
+              [servId]: r.data,
+            };
+          }
+          return next;
+        });
+      } else {
+        console.error("setEfecServEspecialidades no es función:", setEfecServEspecialidades);
+      }
 
-      // combinar cachedCombined + todos los results, deduplicar por id
-      const combined = [...cachedCombined, ...results.flatMap(r => r.data)];
-      const dedup = new Map<number, EfectorPlantilla>();
-      for (const es of combined) dedup.set(es.id, es);
+      // combinar cached + fetched, deduplicar por plantilla.id
+      const combinedPlantillas = [
+        ...cachedPlantillas,
+        ...results.flatMap(r => r.data),
+      ];
+      const dedupPlantillas = new Map<number, EfeSerEspPlantillaExtend>();
+      for (const p of combinedPlantillas) dedupPlantillas.set(p.id, p);
 
-      // evitar duplicados con prev
-      const prevMap = new Map<number, EfectorPlantilla>(especialidades.map(p => [p.id, p]));
-      for (const [id, es] of dedup.entries()) prevMap.set(id, es);
+      // extraer Especialidad[] deduplicadas
+      const espMap = new Map<number, EfeSerEspPlantillaExtend>();
+      for (const p of dedupPlantillas.values()) espMap.set(p.especialidad.id, p);
 
-      setEspecialidades(Array.from(prevMap.values()));
+      // combinar con prev (evitar duplicados)
+      const prevMap = new Map<number, EfeSerEspPlantillaExtend>(especialidades.map(e => [e.id, e]));
+      for (const [id, esp] of espMap) prevMap.set(id, esp);
+
+      const nuevaLista = Array.from(prevMap.values());
+      setEspecialidades(nuevaLista);
       setServicioSeleccionado(prev => [...prev, servicio]);
 
-      // si no hay especialidades
-      if (Array.from(prevMap.values()).length === 0) {
+      if (nuevaLista.length === 0) {
         setAlertMsg("No se encontraron especialidades para este servicio.");
         setAlertSeverity("info");
         setAlertOpen(true);
@@ -263,7 +277,9 @@ const Servicios = ({
                 efectorSeleccionado={efectorSeleccionado}
                 preFunction={allEspecialidadesToChange}
                 setEspecialidades={setEspecialidades}
-                setEfectorEspecialidades={setEfectorEspecialidades}
+                // paso ambos nombres para compatibilidad con distintos hijos
+                setEfecServEspecialidades={setEfecServEspecialidades}
+                setEfectorEspecialidades={setEfecServEspecialidades}
                 confirmField={confirmField}
                 setConfirmField={setConfirmField}
                 confirmValue={confirmValue}

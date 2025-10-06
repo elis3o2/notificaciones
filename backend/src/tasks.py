@@ -9,8 +9,8 @@ from django.db import connections, transaction, connection as default_connection
 from django.db.models import OuterRef, Subquery, Exists, IntegerField, Max
 from django.utils import timezone
 from src.models import (Turno, Plantilla, Mensaje, LastMod,
-                        EfectorPlantilla, EstadoTurno, Efector, Servicio,
-                        Especialidad)
+                        EfeSerEspPlantilla, EstadoTurno, Efector, Servicio,
+                        Especialidad, EfeSerEsp)
 from src.utils import enviar_whatsapp, check_turno, format_plantilla
 
 TZ = ZoneInfo("America/Argentina/Buenos_Aires")
@@ -34,6 +34,7 @@ def make_query(size):
         efe.idefector,
         s.idservicio,
         esp.idespecialidad,
+        tur.idefecservesp,
         tdoc.abrev_doc AS tipoDoc,
         per.nro_doc AS nroDoc,
         TRIM(per.apellido) AS apePac,
@@ -93,7 +94,7 @@ def query_efector():
         TRIM(calle.nom_calle) AS calleEfeV_calles
     FROM efectores efe
     LEFT JOIN v_calles calle ON calle.cod_calle = efe.cod_calle
-    where efe.idefector = ?
+    WHERE efe.idefector = ?
     """
 
 
@@ -149,6 +150,8 @@ def parse_time(value):
 
 
 
+from django.db import IntegrityError
+
 @shared_task
 def verificar_turnos():
     print(f"[{timezone.now()}] Ejecutando verificación de turnos...")
@@ -193,12 +196,12 @@ def verificar_turnos():
                 if mejor_raw is None or este_raw > mejor_raw:
                     mejor_raw = este_raw
 
-                # Determinar estado (igual a tu lógica original)
+                # Mapeo de idestadoturno -> estado (restaurado al mapping esperado)
                 if idestadoturno == 3:
-                    estado = 0
-                elif idestadoturno == 4 or idestadoturno == 5 or idestadoturno == 6:
                     estado = 1
-                elif idestadoturno == 1 or idestadoturno == 2 or idestadoturno == 7:
+                elif idestadoturno in (4, 5, 6):
+                    estado = 4
+                elif idestadoturno in (1, 2, 7):
                     estado = 2
                 elif idestadoturno == 8:
                     estado = 3
@@ -207,7 +210,7 @@ def verificar_turnos():
 
                 # Si corresponde (0 o 3) traigo detalles completos
                 detalles = None
-                if estado in (0, 3):
+                if estado in (1, 3):
                     try:
                         cur.execute(make_query(1), [idturno])
                         detalles = cur.fetchone()
@@ -220,8 +223,8 @@ def verificar_turnos():
                         continue
 
                     (
-                        id, id_efector, id_servicio, id_especialidad, tipo_doc, nro_doc,
-                        ape_pac, nom_pac, fecha_turno, hora_turno,
+                        _id_from_row, id_efector, id_servicio, id_especialidad, id_efe_ser_esp ,
+                        tipo_doc, nro_doc, ape_pac, nom_pac, fecha_turno, hora_turno,
                         ape_prof, nom_prof, nombre_servicio, nombre_especialidad,
                         nombre_efector, calle, altura, letra, coordx, coordy,
                         tel_efe, calle_nom, carac_tel, tel
@@ -242,10 +245,8 @@ def verificar_turnos():
                     else:
                         hora_literal = s_h
 
-                
-                    if estado == 0:
+                    if estado == 1:
                         try:
-                            # Crear Turno manteniendo fecha/hora como strings
                             Turno.objects.create(
                                 id=idturno,
                                 id_estado_id=estado,
@@ -253,25 +254,20 @@ def verificar_turnos():
                                 msj_reprogramado=0,
                                 msj_cancelado=0,
                                 msj_recordatorio=0,
-                                id_efector_id=id_efector,
-                                id_servicio_id=id_servicio,
-                                id_especialidad_id=id_especialidad,
-                                fecha=fecha_literal,   # STRING 'YYYY-MM-DD' (sin cambios)
-                                hora=hora_literal      # STRING 'HH:MM:SS' (sin cambios)
+                                id_efe_ser_esp_id=id_efe_ser_esp,
+                                fecha=fecha_literal,
+                                hora=hora_literal
                             )
                             print(f"[INFO] Creado Turno id={idturno} fecha={fecha_literal} hora={hora_literal}")
                         except Exception as ex:
-                            # si ya existe o falla, lo dejamos en log y continuamos
                             print(f"[ERROR] al crear Turno id={idturno}: {ex}")
                             continue
 
-                # Para estados 2 o 3: actualizar estado y eventualmente enviar mensaje
-                if estado in (1, 2, 3):
+                # Para estados 1,2 o 3: actualizar estado y eventualmente enviar mensaje
+                if estado in (2, 3, 4):
                     try:
-                        # Intento actualizar; update() devuelve la cantidad de filas afectadas
                         filas_actualizadas = Turno.objects.filter(id=idturno).update(id_estado_id=estado)
                         if filas_actualizadas == 0:
-                            # No existe el turno local: no seguimos procesando este registro
                             print(f"[DEBUG] No existe Turno local con id={idturno} => se ignora notificación (estado={estado})")
                             continue
 
@@ -291,41 +287,59 @@ def verificar_turnos():
                             else:
                                 ape_pac = nom_pac = carac_tel = tel = None
 
-                            # obtener los FK del turno directamente (sin levantar excepción)
-                            fks = Turno.objects.filter(id=idturno).values_list("id_efector_id", "id_servicio_id", "id_especialidad_id").first()
-                            if fks:
-                                id_efector, id_servicio, id_especialidad = fks
+                            # --- cambio mínimo: obtener id_efe_ser_esp desde Turno si no lo tenemos
+                            id_efe_ser_esp = Turno.objects.filter(id=idturno).values_list("id_efe_ser_esp_id", flat=True).first()
 
-                                # obtener datos del efector usando el id (si está)
-                                nombre_efector = calle = altura = letra = coordx = coordy = tel_efe = calle_nom = None
+                            # obtener EfeSerEsp para sacar efector/servicio/especialidad (asumimos que existe)
+                            ese_obj = EfeSerEsp.objects.select_related(
+                                "id_efector", "id_servicio", "id_especialidad"
+                            ).get(pk=id_efe_ser_esp)
 
+                            id_efector = ese_obj.id_efector_id
+                            id_servicio = ese_obj.id_servicio_id
+                            id_especialidad = ese_obj.id_especialidad_id
+
+                            nombre_servicio = ese_obj.id_servicio.nombre if hasattr(ese_obj, "id_servicio") and ese_obj.id_servicio else None
+                            nombre_especialidad = ese_obj.id_especialidad.nombre if hasattr(ese_obj, "id_especialidad") and ese_obj.id_especialidad else None
+
+                            # datos del efector vía cursor Informix
+                            nombre_efector = calle = altura = letra = coordx = coordy = tel_efe = calle_nom = None
+                            if id_efector:
                                 cur.execute(query_efector(), [id_efector])
                                 ef_row = cur.fetchone()
                                 if ef_row:
                                     (nombre_efector, calle, altura, letra,
                                     coordx, coordy, tel_efe, calle_nom) = ef_row
 
-                                    # nombres via ORM (asumes servicio/especialidad válidos)
-                                    nombre_servicio = Servicio.objects.get(pk=id_servicio).nombre
-                                    nombre_especialidad = Especialidad.objects.get(pk=id_especialidad).nombre
-
+                            # obtener fecha/hora guardadas en Turno (siempre strings según create)
                             fecha_literal = Turno.objects.filter(id=idturno).values_list("fecha", flat=True).first()
                             hora_literal = Turno.objects.filter(id=idturno).values_list("hora", flat=True).first()
-                            d_fecha = fecha_literal.strftime("%d-%m-%Y")
-                            d_hora = hora_literal.strftime("%H:%M")
 
-                            
+                            # intentar parsear sin hacer chequeos extra (cambio mínimo)
+                            try:
+                                d_fecha = parse_date(fecha_literal).strftime("%d-%m-%Y")
+                            except Exception:
+                                d_fecha = fecha_literal
+                            try:
+                                d_hora = parse_time(hora_literal).strftime("%H:%M")
+                            except Exception:
+                                d_hora = hora_literal
+
                             nom_prof = None
                             ape_prof = None
                         except Exception as ex:
                             print(f"[ERROR] al procesar estado 2 para idturno={idturno}: {ex}")
                             continue
 
-                if estado == 1:
+                if estado == 4:
                     continue
-                
+
+                # Asegurar que id_efe_ser_esp esté definido antes de check_turno:
+                if "id_efe_ser_esp" not in locals() or id_efe_ser_esp is None:
+                    id_efe_ser_esp = Turno.objects.filter(id=idturno).values_list("id_efe_ser_esp_id", flat=True).first()
+
                 telefono = None
-                send, plantilla = check_turno(id_efector, id_servicio, id_especialidad, estado)
+                send, plantilla = check_turno(id_efe_ser_esp, estado)
                 if send and plantilla:
                     if carac_tel and tel:
                         telefono = ("549" + str(carac_tel) + str(tel)).replace(" ", "")
@@ -334,7 +348,7 @@ def verificar_turnos():
                             "nompac": nom_pac or "",
                             "apepac": ape_pac or "",
                             "fecha": d_fecha,
-                            "horaturno":d_hora,
+                            "horaturno": d_hora,
                             "nomprof": nom_prof or "",
                             "apeprof": ape_prof or "",
                             "especialidad": nombre_especialidad or "",
@@ -353,8 +367,6 @@ def verificar_turnos():
                         res = enviar_whatsapp(telefono, mensaje)
                         response_data = getattr(res, "data", {}) or {}
 
-                    
-                        # Registrar Mensaje (evitando pasar QuerySet)
                         if res.status_code == 503:
                             ack = -4
                         elif res.status_code == 400:
@@ -365,9 +377,8 @@ def verificar_turnos():
                             ack = -1
                         else:
                             ack = response_data.get("ack")
-                            
-                        try:
 
+                        try:
                             Mensaje.objects.create(
                                 id_mensaje=response_data.get("id", None),
                                 id_turno_id=idturno,
@@ -380,20 +391,19 @@ def verificar_turnos():
                             print(f"[ERROR] al crear Mensaje para turno {idturno}: {ex}")
                             continue
 
-                        if  ack >= 0:  # actualizar flags en Turno
+                        if ack >= 0:  # actualizar flags en Turno
                             try:
-                                if estado == 0:
+                                if estado == 1:
                                     Turno.objects.filter(id=idturno).update(msj_confirmado=1)
                                 elif estado == 2:
-                                    Turno.objects.filter(id=idturno).update(msj_reprogramado=1)
-                                elif estado == 3:
                                     Turno.objects.filter(id=idturno).update(msj_cancelado=1)
+                                elif estado == 3:
+                                    Turno.objects.filter(id=idturno).update(msj_reprogramado=1)
                             except Exception as ex:
                                 print(f"[ERROR] al actualizar flags msj_* en Turno id={idturno}: {ex}")
                     else:
                         print(f"[DEBUG] No hay teléfono válido para idturno={idturno} (carac_tel={carac_tel}, tel={tel})")
                         try:
-
                             Mensaje.objects.create(
                                 id_turno_id=idturno,
                                 id_plantilla=plantilla,
@@ -403,10 +413,8 @@ def verificar_turnos():
                             )
                         except Exception as ex:
                             print(f"[ERROR] al crear Mensaje para turno {idturno}: {ex}")
-                
                 else:
                     print(f"[DEBUG] check_turno returned send={send}, plantilla={plantilla} for turno {idturno}")
-
 
             # Al final: actualizar LastMod con mejor_raw EXACTO (SQL directo en default_connection)
             try:
@@ -428,7 +436,6 @@ def verificar_turnos():
         print(f"[ERROR] Error en verificación de turnos: {e}")
 
 
-
 @shared_task
 def programar_recordatorios():
     
@@ -439,11 +446,9 @@ def programar_recordatorios():
 
         # Subquery: buscar la configuración activa que coincida por efector/servicio/especialidad
         efp_qs = (
-            EfectorPlantilla.objects
+            EfeSerEspPlantilla.objects
             .filter(
-                id_efector=OuterRef('id_efector'),
-                id_servicio=OuterRef('id_servicio'),
-                id_especialidad=OuterRef('id_especialidad'),
+                id_efe_ser_esp=OuterRef('id_efe_ser_esp'),
                 recordatorio=1
             )
         )
@@ -453,7 +458,7 @@ def programar_recordatorios():
 
         turnos_qs = (
             Turno.objects
-            .filter(id_estado=0, msj_recordatorio=0, fecha__range=(hoy, rango_fin))
+            .filter(id_estado=1, msj_recordatorio=0, fecha__range=(hoy, rango_fin))
             .annotate(
                 efp_exists=Exists(efp_qs),
                 plantilla_reco=Subquery(efp_qs.values('plantilla_reco')[:1]),
@@ -461,7 +466,7 @@ def programar_recordatorios():
             )
             .filter(efp_exists=True)
             .order_by('fecha', 'hora')
-            .values('id', 'id_efector', 'id_servicio', 'id_especialidad',
+            .values('id', 'id_efe_ser_esp',
                     'fecha', 'hora', 'dias_antes', 'plantilla_reco')
         )
 
@@ -505,8 +510,8 @@ def programar_recordatorios():
         for r in resultados:
             try:
                 (
-                    id_turno, id_efector, id_servicio, id_especialidad,
-                    tipo_doc, nro_doc,
+                    id_turno ,id_efector, id_servicio, id_especialidad,
+                    id_efe_ser_esp, tipo_doc, nro_doc,
                     ape_pac, nom_pac, fecha_turno_inf, hora_turno_inf,
                     ape_prof, nom_prof, nombre_servicio, nombre_especialidad,
                     nombre_efector, calle, altura, letra, coordx, coordy,
@@ -570,7 +575,7 @@ def programar_recordatorios():
             else:
                 eta = send_dt
             try:
-                send_reminder_task.apply_async(args=(r,), eta=eta)
+                send_reminder_task.apply_async(args=(list(map(str, r)),), eta=eta)
                 print(f"Programado reminder para id_turno={id_turno} en {eta.isoformat()}")
             except Exception as ex:
                 print(f"[ERROR] al programar send_reminder_task para id_turno={id_turno}: {ex}")
@@ -591,7 +596,7 @@ def send_reminder_task(detalles):
         (
             id_turno,
             id_efector, id_servicio, id_especialidad,
-            tipo_doc, nro_doc,
+            id_efe_ser_esp, tipo_doc, nro_doc,
             ape_pac, nom_pac, fecha_turno, hora_turno,
             ape_prof, nom_prof, nombre_servicio, nombre_especialidad,
             nombre_efector, calle, altura, letra, coordx, coordy,
@@ -609,13 +614,13 @@ def send_reminder_task(detalles):
             return
 
         # Si el turno cambió de estado o ya tiene recordatorio, no enviamos
-        if turno.id_estado_id != 0 or turno.msj_recordatorio == 1:
+        if turno.id_estado_id != 1 or turno.msj_recordatorio == 1:
             print(f"Cambio de estado o ya enviado para turno {id_turno}, abortando envío.")
             return
 
 
         # comprobar si aún corresponde (ej: chequeos de configuración dinámica)
-        send_flag, plantilla = check_turno(id_efector, id_servicio, id_especialidad, 4)
+        send_flag, plantilla = check_turno(id_efe_ser_esp, 4)
         if not send_flag or not plantilla:
             print(f"[DEBUG] check_turno returned send={send_flag}, plantilla={plantilla} for turno {id_turno}")
             return

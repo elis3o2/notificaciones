@@ -5,8 +5,10 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from src.views import (
     PlantillaViewSet, EstadoMsjViewSet, EstadoTurnoViewSet,
     TurnoViewSet, MensajeViewSet, EfectorViewSet, EspecialidadViewSet,
-    EfectorPlantillaViewSet, CustomTokenObtainPairView, ServicioViwSet,
+    EfeSerEspPlantillaViewSet, CustomTokenObtainPairView, ServicioViwSet,
     SendWSP, TurnosMergedAllAPIView, GetEstadoMSJ, HistoricoPaciente,
+    GetPacienteAPIView, GetProfesionalAPIView,TurnoEsperaViewSet,
+    EfeSerEspViewSet
 )
 
 router = DefaultRouter()
@@ -18,13 +20,17 @@ router.register('turnos', TurnoViewSet, basename='turno')
 router.register('mensajes', MensajeViewSet, basename='mensaje')
 router.register('especialidades', EspecialidadViewSet, basename='especialidad')
 router.register('servicios', ServicioViwSet, basename='servicio')
-router.register('efector_plantilla', EfectorPlantillaViewSet, basename='efector_plantilla')
+router.register('efe_ser_esp_plantilla', EfeSerEspPlantillaViewSet, basename='efe_ser_esp_plantilla')
+router.register('turno_espera', TurnoEsperaViewSet, basename='turno_espera')
+router.register('efe_ser_esp', EfeSerEspViewSet, basename='efe_ser_esp')
 
 # src/urls.py
 urlpatterns = [
     path('', include(router.urls)),
     path('turnos-merged-all-list/', TurnosMergedAllAPIView.as_view(), name='turnos-merged-all'),
     path('send_wsp/', SendWSP.as_view(), name='send_mensaje'),
+    path('get_paciente/', GetPacienteAPIView.as_view(), name='get_paciente'),
+    path('get_profesional/', GetProfesionalAPIView.as_view(), name='get_profesional'),
     path('get_last_ack/', GetEstadoMSJ.as_view(), name='get_last_ack'),
     path('get_historico/', HistoricoPaciente.as_view(), name='get_historico'),
     path('token/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),

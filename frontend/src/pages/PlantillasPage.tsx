@@ -8,18 +8,22 @@ import {
   TextField,
   Button,
   Chip,
+  Snackbar,
+  Alert,
 } from "@mui/material";
-import AddIcon from "@mui/icons-material/Add";
 import { getPlantillas, getPlantillaByTipo } from "../features/plantilla/api";
 import type { Plantilla } from "../features/plantilla/types";
-import { updateEfectorPlantilla } from "../features/turno/api";
 import { useLocation, useParams, useNavigate } from "react-router-dom";
+import { updateEfectorPlantilla } from "../features/plantilla/api";
 
 type StateShape = {
   especialidades?: number[]; // <-- siempre IDs
   efectorId?: number;
   field?: string;
 };
+
+// tipo de severidad para alertas
+type AlertSeverity = "error" | "warning" | "info" | "success";
 
 const tipoToId: Record<string, number> = {
   confirmacion: 1,
@@ -67,8 +71,19 @@ const Plantillas: React.FC = () => {
   const [updating, setUpdating] = useState(false);
   const [diasAntes, setDiasAntes] = useState("");
 
+  // Estados de alerta solicitados
+  const [alertOpen, setAlertOpen] = useState<boolean>(false);
+  const [alertMsg, setAlertMsg] = useState<string>("");
+  const [alertSeverity, setAlertSeverity] = useState<AlertSeverity>("info");
+
   const navigate = useNavigate();
   const isModificationMode = Boolean(tipo) && especialidadesIds.length > 0;
+
+  const showAlert = (msg: string, severity: AlertSeverity = "info") => {
+    setAlertMsg(msg);
+    setAlertSeverity(severity);
+    setAlertOpen(true);
+  };
 
   useEffect(() => {
     const fetchPlantillas = async () => {
@@ -86,6 +101,7 @@ const Plantillas: React.FC = () => {
         setPlantillas(data);
       } catch (err) {
         console.error("Error cargando plantillas:", err);
+        showAlert("Error cargando plantillas. Revise la consola.", "error");
       } finally {
         setLoading(false);
       }
@@ -94,7 +110,7 @@ const Plantillas: React.FC = () => {
     fetchPlantillas();
   }, [tipo]);
 
- const groupByType = () => {
+  const groupByType = () => {
     const groups: Record<string, Plantilla[]> = {
       confirmacion: [],
       reprogramacion: [],
@@ -103,7 +119,7 @@ const Plantillas: React.FC = () => {
     };
 
     plantillas.forEach((p: any) => {
-      const key = p.id_tipo
+      const key = p.id_tipo;
 
       // normalizamos posibles valores
       const normalized = idToTipoKey[key];
@@ -116,12 +132,12 @@ const Plantillas: React.FC = () => {
 
   const handleCardAssign = async (plantillaId: number) => {
     if (!tipo || especialidadesIds.length === 0) {
-      alert("No está en modo de modificación o no hay especialidades seleccionadas.");
+      showAlert("No está en modo de modificación o no hay especialidades seleccionadas.", "warning");
       return;
     }
 
     if (tipo === "recordatorio" && (!diasAntes || isNaN(Number(diasAntes)))) {
-      alert("Por favor ingrese un número válido de días antes.");
+      showAlert("Por favor ingrese un número válido de días antes.", "warning");
       return;
     }
 
@@ -135,26 +151,28 @@ const Plantillas: React.FC = () => {
     if (tipo === "recordatorio") {
       const dias = Number(diasAntes);
       if (isNaN(dias) || dias < 0 || dias > 5) {
-        alert("Por favor ingrese un número entre 0 y 5.");
+        showAlert("Por favor ingrese un número entre 0 y 5.", "warning");
         return;
       }
       payload["dias_antes"] = dias;
     }
 
+    // bloqueamos el botón
     setUpdating(true);
     try {
       await Promise.all(especialidadesIds.map((id) => updateEfectorPlantilla(id, payload)));
-      navigate("/list");
+      // mostramos una confirmación y esperamos 2 segundos manteniendo el botón bloqueado
+      showAlert("Plantillas asignadas con éxito.", "success");
+      setTimeout(() => {
+        // en 2 segundos navegamos y liberamos el bloqueo
+        setUpdating(false);
+        navigate("/list");
+      }, 2000);
     } catch (error) {
       console.error("Error actualizando plantilla:", error);
-      alert("Ocurrió un error al actualizar. Revise la consola.");
-    } finally {
+      showAlert("Ocurrió un error al actualizar. Revise la consola.", "error");
       setUpdating(false);
     }
-  };
-
-  const handleAddNewPlantilla = (t: string) => {
-    navigate(`/plantillas/nueva/${t}`);
   };
 
   if (loading) return <Typography>Cargando plantillas...</Typography>;
@@ -293,6 +311,18 @@ const Plantillas: React.FC = () => {
           </Grid>
         </>
       )}
+
+      {/* Snackbar + Alert para notificaciones */}
+      <Snackbar
+        open={alertOpen}
+        autoHideDuration={4000}
+        onClose={() => setAlertOpen(false)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert onClose={() => setAlertOpen(false)} severity={alertSeverity} sx={{ width: "100%" }}>
+          {alertMsg}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

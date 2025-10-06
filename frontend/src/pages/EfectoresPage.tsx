@@ -3,11 +3,13 @@ import { AuthContext } from "../common/contex";
 import { useContext, useState } from "react";
 import { Box, Grid, Card, CardContent, Typography, Snackbar, Alert, Button } from "@mui/material";
 import { useNavigate } from "react-router-dom";
-import type { Efector, EfectorPlantilla, EfectorPlantillaExtend, Servicio } from "../features/turno/types";
+import type { Efector, Servicio, Especialidad } from "../features/efe_ser_esp/types";
+import { getServicioByEfector } from "../features/efe_ser_esp/api";
+import Servicios from "../features/plantilla/components/ServicioBlock";
+import Especialidades from "../features/plantilla/components/EspecialidadBlock";
 import type { AlertSeverity } from "../common/types";
-import { getServicioByEfector } from "../features/turno/api";
-import Servicios from "../features/turno/components/ServicioBlock";
-import Especialidades from "../features/turno/components/EspecialidadBlock";
+import type { EfeSerEspPlantillaExtend } from "../features/plantilla/types";
+
 
 function ListaPage() {
   const { efectores } = useContext(AuthContext);
@@ -15,19 +17,19 @@ function ListaPage() {
 
   // Selección actual
   const [efectorSeleccionado, setEfectorSeleccionado] = useState<Efector[]>([]);
-  const [servicios, setServicios] = useState<Servicio[]>([]);
+  const [servicios, setServicios] = useState<Servicio[]>([])
   const [servicioSeleccionado, setServicioSeleccionado] = useState<Servicio[]>([]);
-  const [especialidades, setEspecialidades] = useState<EfectorPlantillaExtend[]>([]);
+  const [especialidades, setEspecialidades] = useState<EfeSerEspPlantillaExtend[]>([]);
   // service_id -> [efector_id, ...]
   const [servicioEfectorActual, setServicioEfectorActual] = useState<Record<number, number[]>>({});
 
   // Cache: servicios por efector y especialidades por efector->servicio
   const [efectorServicios, setEfectorServicios] = useState<Record<number, Servicio[]>>({});
-  const [efectorEspecialidades, setEfectorEspecialidades] = useState<Record<number, Record<number, EfectorPlantillaExtend[]>>>({});
+  const [efecServEspecialidades, setEfecServEspecialidades] = useState<Record<number, Record<number, EfeSerEspPlantillaExtend[]>>>({});
 
   // Estado del diálogo / confirmación y selección global para SendAll
   const [open, setOpen] = useState<boolean>(false);
-  const [confirmEspecialidades, setConfirmEspecialidades] = useState<EfectorPlantillaExtend[]>([]);
+  const [confirmEspecialidades, setConfirmEspecialidades] = useState<EfeSerEspPlantillaExtend[]>([]);
   const [confirmField, setConfirmField] = useState<"confirmacion" | "reprogramacion" | "cancelacion" | "recordatorio">("confirmacion");
   const [confirmValue, setConfirmValue] = useState<0 | 1>(1);
 
@@ -94,8 +96,7 @@ function ListaPage() {
       // actualizar servicios seleccionados (si un servicio quedó sin efectores, lo removemos)
       setServicioSeleccionado(prev => prev.filter(s => serviciosIdsConEfector.has(s.id)));
 
-      // actualizar especialidades: mantener solo las que correspondan a servicios que siguen teniendo efectores
-      setEspecialidades(prev => prev.filter(es => es.efector.id != efector.id));
+      setEspecialidades(prev => prev.filter(es => es.id_efector != efector.id));
 
       return;
     }
@@ -216,8 +217,8 @@ function ListaPage() {
           setServicioSeleccionado={setServicioSeleccionado}
           especialidades={especialidades}
           setEspecialidades={setEspecialidades}
-          efectorEspecialidades={efectorEspecialidades}
-          setEfectorEspecialidades={setEfectorEspecialidades}
+          efecServEspecialidades={efecServEspecialidades}
+          setEfecServEspecialidades={setEfecServEspecialidades}
           servicioEfectorActual={servicioEfectorActual}
           setServicioEfectorActual={setServicioEfectorActual}
           confirmField={confirmField}
@@ -249,7 +250,8 @@ function ListaPage() {
           setConfirmField={setConfirmField}
           confirmValue={confirmValue}
           setConfirmValue={setConfirmValue}
-          setEfectorEspecialidades={setEfectorEspecialidades}
+          efecServEspecialidades={efecServEspecialidades}
+          setEfecServEspecialidades={setEfecServEspecialidades}
           setAlertOpen={setAlertOpen}
           setAlertMsg={setAlertMsg}
           setAlertSeverity={setAlertSeverity}

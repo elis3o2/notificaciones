@@ -23,7 +23,7 @@ user = User.objects.create_user(
     email='jdoe@example.com',
     first_name='John',
     last_name='Doe',
-    dni='44523692',  # asegurate de pasar string si el campo es CharField
+    dni='44523692', 
 )
 
 # 2️⃣ Asignar los efectores

@@ -1,5 +1,5 @@
 // Confirmacion.tsx
-import type { EfectorPlantillaExtend } from "../types";
+import type { EfeSerEspPlantillaExtend } from "../types";
 import {
   Typography,
   Button,
@@ -16,7 +16,7 @@ import { useNavigate } from "react-router-dom";
 type FieldName = "confirmacion" | "reprogramacion" | "cancelacion" | "recordatorio";
 
 type Props = {
-  onSuccess: (e: EfectorPlantillaExtend, field: FieldName, value: 0 | 1) => void;
+  onSuccess: (e: EfeSerEspPlantillaExtend, field: FieldName, value: 0 | 1) => void;
   /**
    * Opcional: callback que se invoca cuando el diálogo se cierra (internamente).
    */
@@ -25,7 +25,7 @@ type Props = {
   setOpen: Setter<boolean>;
   field: FieldName;
   value: 0 | 1;
-  confirmEspecialidades: EfectorPlantillaExtend[];
+  confirmEspecialidades: EfeSerEspPlantillaExtend[];
   setAlertOpen: Setter<boolean>;
   setAlertMsg: Setter<string>;
   setAlertSeverity: Setter<AlertSeverity>;
@@ -115,8 +115,10 @@ const Confirmacion = ({
       let updated = 0;
       const failedIds: number[] = [];
 
+      
       settled.forEach((res, idx) => {
         const esp = confirmEspecialidades[idx];
+       console.log("ESP",esp)
         if (res.status === "fulfilled") {
           updated++;
           // ahora pasamos también field/value al callback para que el padre actualice correctamente

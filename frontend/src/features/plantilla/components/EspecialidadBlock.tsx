@@ -1,6 +1,7 @@
 // Especialidades.tsx
 import React from "react";
-import type { Servicio, Efector, EfectorPlantillaExtend } from "../types";
+import type { Servicio, Efector, Especialidad} from "../../efe_ser_esp/types";
+import type { EfeSerEspPlantillaExtend } from "../types";
 import {
   Box,
   Typography,
@@ -24,17 +25,18 @@ type FieldName = "confirmacion" | "reprogramacion" | "cancelacion" | "recordator
 type Props = {
   open: boolean;
   setOpen: Setter<boolean>;
-  especialidades: EfectorPlantillaExtend[]; // lista plana: cada entrada ya contiene id_efector, id_servicio, id_especialidad
-  setEspecialidades: Setter<EfectorPlantillaExtend[]>;
+  especialidades: EfeSerEspPlantillaExtend[]; // lista plana: cada entrada ya contiene id_efector, id_servicio, id_especialidad
+  setEspecialidades: Setter<EfeSerEspPlantillaExtend[]>;
   efectorSeleccionado: Efector[]; // lista de efectores seleccionados
   servicioSeleccionado: Servicio[]; // lista de servicios seleccionados
-  confirmEspecialidades: EfectorPlantillaExtend[];
-  setConfirmEspecialidades: Setter<EfectorPlantillaExtend[]>;
+  confirmEspecialidades: EfeSerEspPlantillaExtend[];
+  setConfirmEspecialidades: Setter<EfeSerEspPlantillaExtend[]>;
   confirmField: FieldName;
   setConfirmField: Setter<FieldName>;
   confirmValue: 0 | 1;
   setConfirmValue: Setter<0 | 1>;
-  setEfectorEspecialidades: Setter<Record<number, Record<number, EfectorPlantillaExtend[]>>>;
+  efecServEspecialidades: Record<number, Record<number, EfeSerEspPlantillaExtend[]>>;
+  setEfecServEspecialidades: Setter<Record<number, Record<number, EfeSerEspPlantillaExtend[]>>>;
   setAlertOpen: Setter<boolean>;
   setAlertMsg: Setter<string>;
   setAlertSeverity: Setter<AlertSeverity>;
@@ -55,7 +57,7 @@ const Especialidades = ({
   setConfirmField,
   confirmValue,
   setConfirmValue,
-  setEfectorEspecialidades,
+  setEfecServEspecialidades,
   setAlertOpen,
   setAlertMsg,
   setAlertSeverity,
@@ -66,18 +68,18 @@ const Especialidades = ({
   const [anchorEl, setAnchorEl] = React.useState<HTMLElement | null>(null);
   const [hovered, setHovered] = React.useState<{ espId: number; field: FieldName } | null>(null);
   const openPopper = Boolean(anchorEl && hovered);
-
   // Actualiza cache por id_efector / id_servicio y marca el campo en la entrada concreta
-  const updateCache = (esp: EfectorPlantillaExtend, field: FieldName, value: 0 | 1) => {
+  const updateCache = (esp: EfeSerEspPlantillaExtend, field: FieldName, value: 0 | 1) => {
     const efId = esp.id_efector;
     const servId = esp.id_servicio;
     if (!efId || !servId) return;
 
-    setEfectorEspecialidades(prev => {
+    setEfecServEspecialidades(prev => {
       const prevEf = prev[efId] || {};
+      console.log("PREV",prev)
       const prevArr = prevEf[servId] || especialidades.filter(e => e .id_efector === efId &&  e.id_servicio === servId);
-
-      const newArr = prevArr.map(e => (e.id === esp.id ? ({ ...e, [field]: value } as EfectorPlantillaExtend) : e));
+      console.log("PREVARR", prevArr)
+      const newArr = prevArr.map(e => (e.id === esp.id ? ({ ...e, [field]: value } as EfeSerEspPlantillaExtend) : e));
 
       return {
         ...prev,
@@ -90,17 +92,18 @@ const Especialidades = ({
   };
 
   // Actualiza la lista visible (solo la entrada concreta)
-  const updateEspecialidades = (esp: EfectorPlantillaExtend, field: FieldName, value: 0 | 1) => {
-    setEspecialidades(prev => prev.map(e => (e.id === esp.id ? ({ ...e, [field]: value } as EfectorPlantilla) : e)));
+  const updateEspecialidades = (esp: EfeSerEspPlantillaExtend, field: FieldName, value: 0 | 1) => {
+    setEspecialidades(prev => prev.map(e => (e.id === esp.id ? ({ ...e, [field]: value } as EfeSerEspPlantillaExtend) : e)));
   };
 
-  const handleOnSuccess = (esp: EfectorPlantillaExtend, field: FieldName, value: 0 | 1) => {
+  const handleOnSuccess = (esp: EfeSerEspPlantillaExtend, field: FieldName, value: 0 | 1) => {
     // Confirmacion llamará a esto por cada entrada afectada
+    console.log("ESPPPP", esp);
     updateCache(esp, field, value);
     updateEspecialidades(esp, field, value);
   };
 
-  const handleSectionClick = (esp: EfectorPlantillaExtend, field: FieldName) => {
+  const handleSectionClick = (esp: EfeSerEspPlantillaExtend, field: FieldName) => {
     // alternamos según el estado actual de esa entrada específica
     const current = (esp as any)[field];
     const desired: 0 | 1 = current === 1 ? 0 : 1;
@@ -111,7 +114,7 @@ const Especialidades = ({
     setOpen(true);
   };
 
-  const allEspecialidadesToChange = async (): Promise<EfectorPlantillaExtend[]> => {
+  const allEspecialidadesToChange = async (): Promise<EfeSerEspPlantillaExtend[]> => {
     // SendAll trabaja por efector; devolvemos la lista plana tal como está
     return especialidades;
   };
@@ -153,7 +156,7 @@ const Especialidades = ({
                   efectorSeleccionado={efectorSeleccionado}
                   preFunction={allEspecialidadesToChange}
                   setEspecialidades={setEspecialidades}
-                  setEfectorEspecialidades={setEfectorEspecialidades}
+                  setEfectorEspecialidades={setEfecServEspecialidades}
                   confirmField={confirmField}
                   setConfirmField={setConfirmField}
                   confirmValue={confirmValue}
@@ -171,7 +174,7 @@ const Especialidades = ({
               <Box sx={{ width: "100%", maxWidth: 850, display: "flex", flexDirection: "column", gap: 2 }}>
                 {especialidades.map((esp) => {
                   const nombreEspecialidad = esp.especialidad.nombre;
-                  const nombreEfector = esp.efector.nombre 
+                  const nombreEfector = efectorSeleccionado.find(e=> e.id == esp.id_efector)?.nombre
                   const confirmOn = flagOn(esp.confirmacion);
                   const reproOn = flagOn(esp.reprogramacion);
                   const cancOn = flagOn(esp.cancelacion);
@@ -359,6 +362,7 @@ const Especialidades = ({
                   if (!hovered) return "";
                   const rep = especialidades.find(e => e.id === hovered.espId) as any;
                   if (!rep) return "";
+
                   if (hovered.field === "confirmacion") {
                     return rep.plantilla_conf?.contenido ?? "No hay plantilla configurada";
                   }

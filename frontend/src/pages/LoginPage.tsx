@@ -17,10 +17,8 @@ const LoginPage = () => {
         try {
             const data = await loginUser(username, password);
             initializeAuth(data);
-            console.log(data);
             navigate('/home');
         } catch (error) {
-            console.log(error)
             setAlertOpen(true);
         }
     };

@@ -1,6 +1,7 @@
 // SendAll.tsx (reemplazar)
 import React, { useState } from "react";
-import type { Efector, EfectorPlantillaExtend, Servicio } from "../types";
+import type { Efector, Servicio } from "../../efe_ser_esp/types";
+import type { EfeSerEspPlantillaExtend } from "../types";
 import {
   Stack,
   Tooltip,
@@ -19,15 +20,15 @@ type Props = {
   open: boolean;
   setOpen: Setter<boolean>;
   efectorSeleccionado: Efector[]; // ahora lista
-  preFunction: () => Promise<EfectorPlantillaExtend[]> | EfectorPlantillaExtend[];
-  setEspecialidades: Setter<EfectorPlantillaExtend[]>;
-  setEfectorEspecialidades: Setter<Record<number, Record<number, EfectorPlantillaExtend[]>>>;
+  preFunction: () => Promise<EfeSerEspPlantillaExtend[]> | EfeSerEspPlantillaExtend[];
+  setEspecialidades: Setter<EfeSerEspPlantillaExtend[]>;
+  setEfectorEspecialidades: Setter<Record<number, Record<number, EfeSerEspPlantillaExtend[]>>>;
   confirmField: FieldName;
   setConfirmField: Setter<FieldName>;
   confirmValue: 0 | 1;
   setConfirmValue: Setter<0 | 1>;
-  confirmEspecialidades: EfectorPlantillaExtend[]; // ahora viene del padre
-  setConfirmEspecialidades: Setter<EfectorPlantillaExtend[]>; // ahora actualizamos el padre
+  confirmEspecialidades: EfeSerEspPlantillaExtend[]; // ahora viene del padre
+  setConfirmEspecialidades: Setter<EfeSerEspPlantillaExtend[]>; // ahora actualizamos el padre
   setAlertOpen: Setter<boolean>;
   setAlertMsg: Setter<string>;
   setAlertSeverity: Setter<AlertSeverity>;
@@ -92,12 +93,12 @@ const SendAll = ({
     }
   };
 
-const updateCache = (esp: EfectorPlantillaExtend, field: FieldName, value: 0 | 1) => {
-  const efId = esp.efector.id;
-  const seId = esp.servicio.id;
+const updateCache = (esp: EfeSerEspPlantillaExtend, field: FieldName, value: 0 | 1) => {
+  const efId = esp.id_efector;
+  const seId = esp.id_servicio;
 
   // crear una copia actualizada del objeto
-  const updatedEsp = { ...esp, [field]: value } as EfectorPlantillaExtend;
+  const updatedEsp = { ...esp, [field]: value } as EfeSerEspPlantillaExtend;
 
   setEfectorEspecialidades((prev) => {
     // copia de todo el estado
@@ -121,20 +122,20 @@ const updateCache = (esp: EfectorPlantillaExtend, field: FieldName, value: 0 | 1
 };
 
 
-  const updateEspecialidades = (esp: EfectorPlantillaExtend, field: FieldName, value: 0 | 1) => {
+  const updateEspecialidades = (esp: EfeSerEspPlantillaExtend, field: FieldName, value: 0 | 1) => {
     setEspecialidades((prev) =>
-      prev.map((e) => (e.id === esp.id ? ({ ...e, [field]: value } as EfectorPlantillaExtend) : e))
+      prev.map((e) => (e.id === esp.id ? ({ ...e, [field]: value } as EfeSerEspPlantillaExtend) : e))
     );
   };
 
   // onSuccess ahora recibe (esp, field, value)
-  const handleOnSuccess = (esp: EfectorPlantillaExtend, field: FieldName, value: 0 | 1) => {
+  const handleOnSuccess = (esp: EfeSerEspPlantillaExtend, field: FieldName, value: 0 | 1) => {
     updateCache(esp, field, value);
     updateEspecialidades(esp, field, value);
 
     // Además actualizar la lista de confirmEspecialidades del padre (reflejar el cambio)
     setConfirmEspecialidades((prev) =>
-      prev.map((p) => (p.id === esp.id ? ({ ...p, [field]: value } as EfectorPlantillaExtend) : p))
+      prev.map((p) => (p.id === esp.id ? ({ ...p, [field]: value } as EfeSerEspPlantillaExtend) : p))
     );
   };
 

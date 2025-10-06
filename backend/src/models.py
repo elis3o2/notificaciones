@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
+from core import settings
 
 class TipoPlantilla(models.Model):
     id = models.IntegerField(primary_key=True)
@@ -71,9 +72,22 @@ class Especialidad(models.Model):
         ordering = ['nombre']
 
 
+class EfeSerEsp(models.Model):
+    id = models.IntegerField(primary_key=True)
+    id_efector = models.ForeignKey(
+        Efector, models.DO_NOTHING, db_column='id_efector')
+    id_servicio = models.ForeignKey(
+        Servicio, models.DO_NOTHING, db_column='id_servicio')
+    id_especialidad = models.ForeignKey(
+        Especialidad, models.DO_NOTHING, db_column='id_especialidad')
+    
+    class Meta:
+        managed = False
+        db_table = 'efe_ser_esp'
+
 
 class Turno(models.Model):
-    id = models.CharField(max_length=20, primary_key=True)
+    id = models.IntegerField(primary_key=True)
     id_estado = models.ForeignKey(
         EstadoTurno, models.DO_NOTHING, db_column='id_estado')
     fecha = models.DateField()
@@ -82,12 +96,8 @@ class Turno(models.Model):
     msj_reprogramado = models.IntegerField()
     msj_cancelado = models.IntegerField()
     msj_recordatorio = models.IntegerField()
-    id_efector = models.ForeignKey(
-        Efector, models.DO_NOTHING, db_column='id_efector')
-    id_servicio = models.ForeignKey(
-        Servicio, models.DO_NOTHING, db_column='id_servicio')
-    id_especialidad = models.ForeignKey(
-        Especialidad, models.DO_NOTHING, db_column='id_especialidad')
+    id_efe_ser_esp = models.ForeignKey(
+        EfeSerEsp, models.DO_NOTHING, db_column='id_efe_ser_esp')
 
     class Meta:
         managed = False
@@ -112,16 +122,52 @@ class Mensaje(models.Model):
         db_table = 'mensaje'
 
 
+class EstadoTurnoEspera(models.Model):
+    id = models.IntegerField(primary_key=True)  # equivale a TINYINT UNSIGNED
+    significado = models.CharField(max_length=16)
+
+    class Meta:
+        managed = False
+        db_table = 'estado_turno_espera'
 
 
-class EfectorPlantilla(models.Model):
+class TurnoEspera(models.Model):
     id = models.AutoField(primary_key=True)
-    id_efector = models.ForeignKey(
-        Efector, models.DO_NOTHING, db_column='id_efector')
-    id_servicio = models.ForeignKey(
-        Servicio, models.DO_NOTHING, db_column='id_servicio')
-    id_especialidad = models.ForeignKey(
-        Especialidad, models.DO_NOTHING, db_column='id_especialidad')
+    id_estado = models.ForeignKey(
+        EstadoTurnoEspera, models.DO_NOTHING, db_column='id_estado')
+    id_profesional_solicitante = models.IntegerField()
+    id_efector_solicitante = models.ForeignKey(
+        Efector, models.DO_NOTHING, db_column="id_efector_solicitante"
+    )
+
+    id_efe_ser_esp = models.ForeignKey(
+        EfeSerEsp, models.DO_NOTHING, db_column='id_efe_ser_esp'
+    )
+    id_paciente = models.IntegerField()
+    prioridad = models.IntegerField()
+    fecha_hora_creacion = models.DateTimeField()
+    fecha_hora_cierre = models.DateTimeField(null=True, blank=True)
+    usuario_creacion = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='turnos_creados'   
+    )
+    usuario_cierre = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='turnos_cerrados', 
+        null=True,
+        blank=True
+    )
+    class Meta:
+        db_table = 'turno_espera'
+
+
+
+class EfeSerEspPlantilla(models.Model):
+    id = models.AutoField(primary_key=True)
+    id_efe_ser_esp = models.ForeignKey(
+        EfeSerEsp, models.DO_NOTHING, db_column='id_efe_ser_esp')
     confirmacion = models.IntegerField()
     reprogramacion = models.IntegerField()
     cancelacion = models.IntegerField()
@@ -138,7 +184,7 @@ class EfectorPlantilla(models.Model):
 
     class Meta:
         managed = False
-        db_table = 'efector_plantilla'
+        db_table = 'efe_ser_esp_plantilla'
 
 
 
@@ -149,6 +195,21 @@ class CustomUser(AbstractUser):
     def __str__(self):
         return self.username
 
+
+
+class RegistroBanderas(models.Model):
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+    efec_esp_serv_plantilla = models.ForeignKey(EfeSerEspPlantilla, on_delete=models.DO_NOTHING)
+    bandera = models.ForeignKey(TipoPlantilla, on_delete=models.DO_NOTHING)
+    valor_set = models.IntegerField()
+    plantilla = models.ForeignKey(Plantilla, on_delete=models.DO_NOTHING, null=True)
+    dias_antes = models.IntegerField(null=True)
+    fecha = models.DateTimeField(auto_now_add=True)
 
 class LastMod(models.Model):
     fecha = models.DateTimeField()

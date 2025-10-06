@@ -22,6 +22,13 @@ if (location.pathname.startsWith("/plantillas")) {
 if (location.pathname.startsWith("/historico")) {
     backTo = "/turnos";
   }
+if (location.pathname.startsWith("/add-espera")) {
+    backTo = "/espera";
+  }
+if (location.pathname.startsWith("/espera")) {
+    backTo = "/home";
+  }
+
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
       <Navbar backTo={backTo} /> {/* 👈 se pasa la prop */}

@@ -5,7 +5,6 @@ import { AuthContext } from '../contex';
 
 const PrivateRoute = ({ children }: { children: ReactElement }): ReactElement | null => {
     const { authTokens } = useContext(AuthContext);
-    console.log("TOKENS", authTokens)
     return authTokens ? children : <Navigate to='/login' />;
 };
 

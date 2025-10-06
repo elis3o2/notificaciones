@@ -10,21 +10,24 @@ from django.db.models.functions import Coalesce
 from django.conf import settings
 from django.db import connections, DatabaseError
 from django.core.cache import cache
-from src.models import (Plantilla,  EstadoMsj, EstadoTurno,
-                Turno, Mensaje, Efector,Servicio, Especialidad, EfectorPlantilla)
+from src.models import (Plantilla,  EstadoMsj, EstadoTurno, Turno, TurnoEspera,
+                        Mensaje, Efector,Servicio, Especialidad, EfeSerEspPlantilla,
+                        EfeSerEsp)
 
 from src.serializers import(PlantillaSerializer, EstadoMsjSerializer, EstadoTurnoSerializer,
-                TurnoSerializer, MensajeSerializer, EfectorSerializer, ServicioSerializer,
-                EspecialidadSerializer, EfectorPlantillaSerializer, EfectorPlantillaDetailSerializer,
-                CustomTokenObtainPairSerializer,  TurnoMergedSerializer, HistoricoPacienteSerializer)
-from src.utils import enviar_whatsapp, get_actual_state
+                TurnoSerializer, TurnoEsperaSerializer, MensajeSerializer,
+                EfectorSerializer, ServicioSerializer,EspecialidadSerializer, EfeSerEspPlantillaSerializer, EfeSerEspPlantillaDetailSerializer,
+                CustomTokenObtainPairSerializer,  TurnoMergedSerializer, HistoricoPacienteSerializer, 
+                PacienteSerializer, ProfesionalSerializer, EfeSerEspSerializer, EfeSerEspEfectorSerializer,
+                EfeSerEspCompletoSerializer, TurnoEsperaCreateSerializer, TurnoEsperaCloseSerializer )
+
+from src.utils import enviar_whatsapp, get_actual_state, fetch_paciente, fetch_profesional
 import logging
 logger = logging.getLogger(__name__)
 
 class PlantillaViewSet(viewsets.ModelViewSet):
     queryset = Plantilla.objects.all()
     serializer_class = PlantillaSerializer
-
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -39,12 +42,9 @@ class EstadoMsjViewSet(viewsets.ModelViewSet):
     serializer_class = EstadoMsjSerializer
 
 class EstadoTurnoViewSet(viewsets.ModelViewSet):
-    queryset = Plantilla.objects.all()
-    serializer_class = EstadoTurnoSerializer
-
-class EstadoTurnoViewSet(viewsets.ModelViewSet):
     queryset = EstadoTurno.objects.all()
     serializer_class = EstadoTurnoSerializer
+
 
 class TurnoViewSet(viewsets.ModelViewSet):
     queryset = Turno.objects.all()
@@ -70,36 +70,29 @@ class TurnoViewSet(viewsets.ModelViewSet):
         return nums if nums else None
 
     def get_queryset(self):
-        """
-        Filtrado flexible y retrocompatible:
-        - id_servicio, id_especialidad: aceptan csv o un único valor
-        - efectores o id_efector: aceptan csv o único valor
-        - id_estado: valor único (mantengo comportamiento original)
-        """
         qs = super().get_queryset()
         rp = self.request.query_params
 
-        servicios = self._parse_csv_param('id_servicio')            # p.ej. '1,2'
-        especialidades = self._parse_csv_param('id_especialidad')  # p.ej. '3,4'
-        # aceptamos tanto 'efectores' (nuevo) como 'id_efector' (posible uso anterior)
+        servicios = self._parse_csv_param('id_servicio')
+        especialidades = self._parse_csv_param('id_especialidad')
         efectores = self._parse_csv_param('efectores') or self._parse_csv_param('id_efector')
 
         id_estado = rp.get('id_estado')
-        if id_estado is not None and id_estado != '':
+        if id_estado not in (None, ''):
             try:
                 qs = qs.filter(id_estado=int(id_estado))
             except ValueError:
-                # si viene mal formado, lo ignoramos (para no romper llamadas existentes)
                 pass
 
         if servicios:
-            qs = qs.filter(id_servicio__in=servicios)
+            qs = qs.filter(id_efe_ser_esp__id_servicio__in=servicios)
         if especialidades:
-            qs = qs.filter(id_especialidad__in=especialidades)
+            qs = qs.filter(id_efe_ser_esp__id_especialidad__in=especialidades)
         if efectores:
-            qs = qs.filter(id_efector__in=efectores)
+            qs = qs.filter(id_efe_ser_esp__id_efector__in=efectores)
 
         return qs
+
 
 
     @action(detail=False, methods=["get"], url_path="count")
@@ -148,81 +141,201 @@ class ServicioViwSet(viewsets.ModelViewSet):
     queryset = Servicio.objects.all()
     serializer_class = ServicioSerializer
 
+
 class EspecialidadViewSet(viewsets.ModelViewSet):
     queryset = Especialidad.objects.all()
     serializer_class = EspecialidadSerializer
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        id_servicio = self.request.query_params.get("id_servicio")
+        if id_servicio:
+            qs = qs.filter(id_servicio=id_servicio)
+        return qs
 
-class EfectorPlantillaViewSet(viewsets.ModelViewSet):
-    queryset = EfectorPlantilla.objects.all()
-    serializer_class = EfectorPlantillaSerializer
+class EfeSerEspViewSet(viewsets.ModelViewSet):
+    queryset = EfeSerEsp.objects.all()
+    serializer_class = EfeSerEspSerializer
 
-    @action(detail=False, methods=["get"], url_path="buscar")
-    def search(self, request):
-        id_efector = request.query_params.get('id_efector')
-        id_servicio = request.query_params.get('id_servicio')
+    @action(detail=False, methods=["get"], url_path="servicios")
+    def servicios_por_efector(self, request):
+        id_efector = request.query_params.get("id_efector")
+
+        if not id_efector:
+            return Response(
+                {"detail": "Debe enviar id_efector como query param"},
+                status=400
+            )
+
+        # Filtramos por efector
+        queryset = self.get_queryset().filter(id_efector=id_efector)
+
+        # Armamos la lista [{id: X, nombre: Y}, ...]
+        servicios = [
+            {"id": item["id_servicio"], "nombre": item["id_servicio__nombre"]}
+            for item in queryset.values("id_servicio", "id_servicio__nombre").distinct()
+        ]
+
+        return Response(servicios)
+
+
+    @action(detail=False, methods=["get"], url_path="efectores")
+    def get_efectores(self, request):
+        id_servicio = request.query_params.get("id_ser")
+        id_especialidad = request.query_params.get("id_esp")
 
         queryset = self.get_queryset()
 
-        if id_efector:
-            queryset = queryset.filter(id_efector=id_efector)
+        try:
+            if id_especialidad:
+                queryset = queryset.filter(id_especialidad=int(id_especialidad))
+            if id_servicio:
+                queryset = queryset.filter(id_servicio=int(id_servicio))
+        except ValueError:
+            return Response(
+                {"detail": "Parámetros inválidos. 'id_ser' e 'id_esp' deben ser enteros."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
+        serializer = EfeSerEspEfectorSerializer(queryset, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    @action(detail=False, methods=["get"], url_path="id")
+    def get_id(self, request):
+        id_efector = request.query_params.get("efector")
+        id_servicio = request.query_params.get("servicio")
+        id_especialidad = request.query_params.get("especialidad")
+        
+        if not id_efector or not id_servicio or not id_especialidad:
+            return Response(
+                {"detail": "Faltan datos"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        queryset = self.get_queryset()
+
+        try:
+            queryset = queryset.get(
+                id_efector=int(id_efector),
+                id_servicio=int(id_servicio),
+                id_especialidad=int(id_especialidad),
+            )
+        except ValueError:
+            return Response(
+                {"detail": "Parámetros inválidos. 'efector', 'servicio' y 'especialidad' deben ser enteros."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = EfeSerEspCompletoSerializer(queryset)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+
+
+class EfeSerEspPlantillaViewSet(viewsets.ModelViewSet):
+    queryset = EfeSerEspPlantilla.objects.all()
+    serializer_class = EfeSerEspPlantillaDetailSerializer
+
+    @action(detail=False, methods=["get"], url_path="buscar")
+    def search(self, request):
+        id_efector = request.query_params.get("id_efector")
+        id_servicio = request.query_params.get("id_servicio")
+
+        queryset = self.get_queryset()
+        if id_efector:
+            queryset = queryset.filter(id_efe_ser_esp__id_efector=id_efector)
         if id_servicio:
-            queryset = queryset.filter(id_servicio=id_servicio)
+            queryset = queryset.filter(id_efe_ser_esp__id_servicio=id_servicio)
 
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
 
-    @action(detail=False, methods=["get"], url_path="servicios")
-    def search_servicio(self, request):
-        id_efector = request.query_params.get('id_efector')
-
-        if not id_efector:
-            return Response({"error": "Se requiere id_efector"}, status=400)
-
-        servicios = (
-            EfectorPlantilla.objects
-            .filter(id_efector=id_efector)
-            .values("id_servicio", "id_servicio__nombre")
-            .distinct()
-            .order_by("id_servicio__nombre")
-        )
-        servicios_limpios = [{"id": s["id_servicio"], "nombre": s["id_servicio__nombre"]} for s in servicios]
-        return Response(servicios_limpios)
-    
-    
     @action(detail=False, methods=["get"], url_path="detalle")
     def search_detalle(self, request):
-        id_efector = request.query_params.get('id_efector')
-        id_servicio = request.query_params.get('id_servicio')
+        id_efector = request.query_params.get("id_efector")
+        id_servicio = request.query_params.get("id_servicio")
 
         queryset = self.get_queryset()
-
         if id_efector:
-            queryset = queryset.filter(id_efector=id_efector)
-
+            queryset = queryset.filter(id_efe_ser_esp__id_efector=id_efector)
         if id_servicio:
-            queryset = queryset.filter(id_servicio=id_servicio)
+            queryset = queryset.filter(id_efe_ser_esp__id_servicio=id_servicio)
 
-        # aplico select_related para que haga join en una sola query
         queryset = queryset.select_related(
-            "id_especialidad",
+            "id_efe_ser_esp",
             "plantilla_conf",
             "plantilla_repr",
             "plantilla_canc",
             "plantilla_reco",
-        )
-    
-        queryset = queryset.order_by('id_especialidad__nombre')
+        ).order_by("id_efe_ser_esp__id_especialidad__nombre")
 
-
-        serializer = EfectorPlantillaDetailSerializer(queryset, many=True, context={"request": request})
+        serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
+
+
+class TurnoEsperaViewSet(viewsets.ModelViewSet):
+    queryset = TurnoEspera.objects.all()
+    serializer_class = TurnoEsperaSerializer
+
+    @action(detail=False, methods=["get"], url_path="espera")
+    def search_detalle(self, request):
+        id_efector = request.query_params.get("id_efector")
+
+        queryset = self.get_queryset()
+        queryset = queryset.filter(id_estado=0)
+        if id_efector:
+            queryset = queryset.filter(id_efe_ser_esp__id_efector=id_efector)
+
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=["get"], url_path="paciente")
+    def search_paciente(self, request):
+        id_paciente = request.query_params.get("id")
+
+        queryset = self.get_queryset()
+        if id_paciente:
+            queryset = queryset.filter(id_paciente=id_paciente)
+
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+    
+    def create(self, request, *args, **kwargs):
+        # 1. Usa tu serializer de creación (que setea usuario y fecha automáticamente)
+        serializer = TurnoEsperaCreateSerializer(
+            data=request.data, 
+            context={"request": request}   # para poder acceder a request.user en el serializer
+        )
+        serializer.is_valid(raise_exception=True)
+        instance = serializer.save()
+        out = TurnoEsperaSerializer(instance, context={"request": request})
+
+        return Response(out.data, status=status.HTTP_201_CREATED)
+    
+    @action(detail=False, methods=["post"], url_path="close")
+    def close_turno(self, request):
+        id = request.query_params.get("id")
+        turno = self.get_queryset().get(pk=id)
+        serializer = TurnoEsperaCloseSerializer(
+            turno,
+            data={},  # no hace falta pasar nada más
+            context={"request": request},
+            partial=True,
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(
+            TurnoEsperaSerializer(turno, context={"request": request}).data,
+            status=status.HTTP_200_OK
+        )
+
+        
+
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
-
-
 
 
 class SendWSP(APIView):
@@ -254,6 +367,84 @@ class GetEstadoMSJ(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         return get_actual_state(id, id_mensaje, numero)
+
+
+# ---------- API para búsquedas NO por id (retorna listas) ----------
+class GetPacienteAPIView(APIView):
+    """
+    GET /api/pacientes/?dni=...&nombre=...&apellido=...
+    Si se pasa 'id' devuelve solo un objeto (como mejora; pero preferimos usar GetPacienteDetail para id).
+    Aquí se usa para búsquedas por filtros (no-id).
+    """
+    def get(self, request):
+        id_persona = request.query_params.get('id')
+        dni = request.query_params.get('dni')
+
+
+        try:
+            if id_persona:
+                # si se pasa id devolvemos UN solo objeto
+                paciente = fetch_paciente(id_persona=int(id_persona))
+                if not paciente:
+                    return Response({}, status=status.HTTP_404_NOT_FOUND)
+                ser = PacienteSerializer(instance=paciente)
+                return Response(ser.data, status=status.HTTP_200_OK)
+
+            # búsqueda por filtros (al menos uno requerido)
+            if not (dni):
+                return Response({"detail": "Al menos uno de los parámetros (dni, nombre, apellido) es requerido para la búsqueda."},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+            pacientes = fetch_paciente(dni=dni)
+            ser = PacienteSerializer(instance=pacientes, many=True)
+            return Response(ser.data, status=status.HTTP_200_OK)
+
+        except DatabaseError:
+            logger.exception("Error consultando pacientes")
+            return Response({"detail": "Error al consultar la base de datos."},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except Exception:
+            logger.exception("Error inesperado en GetPacienteAPIView")
+            return Response({"detail": "Error interno."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class GetProfesionalAPIView(APIView):
+    """
+    GET /api/profesionales/?id=...  OR ?id_efe=...&nombre=...&apellido=...
+    Si se pasa id devuelve un único profesional; si no, devuelve todos los que coincidan con id_efe y filtros.
+    """
+    def get(self, request):
+        try:
+            id_prof = request.query_params.get('id')
+            id_efector = request.query_params.get('id_efector')
+            nombre = request.query_params.get('nombre')
+            apellido = request.query_params.get('apellido')
+
+            if id_prof:
+                prof = fetch_profesional(id_prof=int(id_prof))
+                if not prof:
+                    return Response({}, status=status.HTTP_404_NOT_FOUND)
+                ser = ProfesionalSerializer(instance=prof)
+                return Response(ser.data, status=status.HTTP_200_OK)
+
+            # búsqueda por efector (requerido si no hay id)
+            if not id_efector:
+                return Response({"detail": "Parámetro 'id_efe' requerido para búsqueda sin id."},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+            profs = fetch_profesional(id_efector=int(id_efector), nombre=nombre, apellido=apellido)
+            ser = ProfesionalSerializer(instance=profs, many=True)
+            return Response(ser.data, status=status.HTTP_200_OK)
+
+        except DatabaseError:
+            logger.exception("Error consultando profesionales")
+            return Response({"detail": "Error al consultar la base de datos."},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except Exception:
+            logger.exception("Error inesperado en GetProfesionalAPIView")
+            return Response({"detail": "Error interno."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 
 class HistoricoPaciente(APIView):
     def get(self, request):
@@ -335,20 +526,8 @@ class HistoricoPaciente(APIView):
                 desc = cur.description
                 if desc:
                     for c in desc:
-                        # Algunos drivers devuelven (name, type_code, ...) como tuplas,
-                        # otros devuelven directamente un objeto java.lang.String.
-                        try:
-                            # intentar obtener primer elemento (DB-API estándar)
-                            name = c[0]
-                        except Exception:
-                            # si falla (p. ej. c es java.lang.String), usar c directamente
-                            name = c
-                        # forzamos a str de Python (esto llama a toString() si es objeto Java)
-                        name_py = str(name)
+                        name_py = str(c[0])
                         cols.append(name_py.lower())
-                else:
-                    # Por si description es None, creamos nombres genericos
-                    cols = [f'col_{i}' for i in range(len(rows[0]))]
 
         except DatabaseError:
             logger.exception("Error consultando Informix")
@@ -363,20 +542,7 @@ class HistoricoPaciente(APIView):
         for r in rows:
             item = {}
             for i, v in enumerate(r):
-                col = cols[i] if i < len(cols) else f'col_{i}'
-                # decodificar bytes si corresponden
-                if isinstance(v, (bytes, bytearray)):
-                    try:
-                        v = v.decode('utf-8', errors='ignore')
-                    except Exception:
-                        v = str(v)
-                # Normalizar fechas/datetimes a ISO para evitar problemas de serialización
-                try:
-                    from datetime import date, datetime
-                    if isinstance(v, (datetime, date)):
-                        v = v.isoformat()
-                except Exception:
-                    pass
+                col = cols[i]
                 item[col] = v
             result.append(item)
 
@@ -427,12 +593,12 @@ class TurnosMergedAllAPIView(APIView):
                 ids_int = [int(x) for x in ids_order]
 
                 # traemos instancias y relaciones necesarias
-                qs = Turno.objects.select_related("id_efector", "id_servicio", "id_especialidad").filter(id__in=ids_int)
+                qs = Turno.objects.select_related("id_efe_ser_esp").filter(id__in=ids_int)
                 # map para reordenar según ids_order
                 local_map = {str(obj.id): obj for obj in qs}
                 local_list = [local_map[i] for i in ids_order if i in local_map]
             else:
-                qs = Turno.objects.select_related("id_efector", "id_servicio", "id_especialidad").order_by('-fecha', '-hora')
+                qs = Turno.objects.select_related("id_efe_ser_esp").order_by('-fecha', '-hora')
                 local_list = list(qs)
 
                 # aplicar cantidad cuando no se pasaron ids

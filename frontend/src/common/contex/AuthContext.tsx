@@ -1,7 +1,7 @@
 import { createContext, useState, useRef, } from 'react'
 import type {ReactNode } from 'react';
 import type { AuthContextType, InitializeAuthData, AuthTokens } from './types';
-import type { Efector } from '../../features/turno/types';
+import type { Efector } from '../../features/efe_ser_esp/types';
 
 const defaultContext: AuthContextType = {
     authTokens: null,
@@ -41,7 +41,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setUsername(data.username);
             localStorage.setItem('username', data.username);
         }
-        console.log(data.efectores)
+        
         if (data.efectores) {
             const sorted = [...data.efectores].sort((a, b) =>
                 a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' })

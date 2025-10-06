@@ -8,6 +8,9 @@ import Plantilla from '../pages/PlantillasPage';
 import AddPlantillaPage from '../pages/AddPlantillaPage';
 import TurnosPage from '../pages/TurnoPage';
 import HistoricoPage from '../pages/HistoricoPage';
+import ListaEspera from '../pages/ListaEsperaPage';
+import AddEspera from '../pages/AddEsperaPage';
+import TurnosEsperaDashboard from '../pages/EsperaHistoricoPage';
 const AppRoutes = () => {
   return (
     <Routes>
@@ -29,7 +32,10 @@ const AppRoutes = () => {
         <Route path="/plantillas/nueva/:tipo" element={<AddPlantillaPage />}/> 
         <Route path="/turnos" element={<TurnosPage />}/>
         <Route path="/historico" element={<HistoricoPage />}/>
-          {/* Aquí podés agregar más rutas privadas */}
+        <Route path="/espera" element={<ListaEspera />}/>
+        <Route path="/add-espera" element={<AddEspera />}/>
+        <Route path="/espera-paciente" element={<TurnosEsperaDashboard />}/>
+        <Route path='*' element={<Navigate to="/home" replace />} />
       </Route>
     </Routes>
   );

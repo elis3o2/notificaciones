@@ -1,5 +1,5 @@
 // InitPage.tsx
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback,useContext } from 'react'
 import {
   Box,
   Card,
@@ -17,33 +17,23 @@ import {
   CircularProgress
 } from "@mui/material"
 import { useNavigate } from 'react-router-dom'
-import {
-  getTurnosAll,
-  getEfectoresAll,
-  getServiciosAll,
-  getEspecialidadesAll,
-  getEfectorPlantillasAll,
-  getTurnosCount,
-  getTurnosByCombinations
-} from '../features/turno/api'
-import { Business, MedicalServices, LocalHospital } from "@mui/icons-material"
-
-import type { Efector, Especialidad, Servicio } from '../features/turno/types'
-import type { EfectorPlantilla } from '../features/turno/types'
+import { getTurnosCount } from '../features/turno/api'
+import { getEfectoresAll, getServiciosAll, getEspecialidadesAll, getEfeSerEspAll} from '../features/efe_ser_esp/api'
+import type { Efector, Especialidad, Servicio } from '../features/efe_ser_esp/types'
+import type { EfeSerEsp } from '../features/efe_ser_esp/types'
 import HospitalIcon from '../assets/hospital.png'
 import AidKitIcon from '../assets/first-aid-kit.png'
 import MedicalReportIcon from '../assets/medical-report.png'
-
+import {  AuthContext } from '../common/contex'
 
 function InitPage() {
   const [turnos, setTurnos] = useState<number>(0)
-  const [efectores, setEfectores] = useState<Efector[]>([])
+  const { efectores } = useContext(AuthContext);
   const [servicios, setServicios] = useState<Servicio[]>([])
   const [especialidades, setEspecialidades] = useState<Especialidad[]>([])
-  const [efectorPlantillas, setEfectorPlantillas] = useState<EfectorPlantilla[]>([])
+  const [combinaciones, setCombinaciones] = useState<EfeSerEsp[]>([])
 
   // Disponibles según combinación actual
-  const [availableEfectores, setAvailableEfectores] = useState<number[]>([])
   const [availableServicios, setAvailableServicios] = useState<number[]>([])
   const [availableEspecialidades, setAvailableEspecialidades] = useState<number[]>([])
 
@@ -68,100 +58,75 @@ function InitPage() {
 
   const init = async () => {
     try {
-      const [ef, se, es, ep] = await Promise.all([
-        getEfectoresAll(),
+      const [se, es, co] = await Promise.all([
         getServiciosAll(),
         getEspecialidadesAll(),
-        getEfectorPlantillasAll()
+        getEfeSerEspAll()
       ]);
-      
-      setEfectores(ef);
+    
       setServicios(se);
       setEspecialidades(es);
-      setEfectorPlantillas(ep);
+      setCombinaciones(co);
       
-      // Inicializar disponibles con todos los IDs
-      setAvailableEfectores(ef.map(e => e.id));
       setAvailableServicios(se.map(s => s.id));
       setAvailableEspecialidades(es.map(e => e.id));
     } catch (error) {
       console.error("Error inicializando datos:", error);
     } finally {
       setLoading(false);
+
     }
   }
 
   const filterByEfec = useCallback((efs: number[]) => {
     if (efs.length === 0) {
-      if (selectedServicios.length === 0){
-        setAvailableEfectores(efectores.map(e => e.id))
-        setAvailableServicios(servicios.map(s => s.id))
-        setAvailableEspecialidades(especialidades.map(e => e.id))
-      }
-      else{
-        setAvailableServicios(servicios.map(s => s.id))
-        const posibles = efectorPlantillas.filter(p => selectedServicios.includes(p.id_servicio));
-        setAvailableEfectores(posibles.map(e => e.id_efector))
-        setAvailableEspecialidades(posibles.map(p => p.id_especialidad))
-      }
+      setAvailableServicios(servicios.map(s => s.id));
+      setAvailableEspecialidades(especialidades.map(e => e.id));
+      setSelectedServicios([]);
+      setSelectedEspecialidades([]);
       return;
     }
 
-    const posibles = efectorPlantillas.filter(p => efs.includes(p.id_efector));
-    const serviciosPosibles = [...new Set(posibles.map(p => p.id_servicio))];
-    const especialidadesPosibles = [...new Set(posibles.map(p => p.id_especialidad))];
+    // Filtramos combinaciones por efectores seleccionados
+    const posibles = combinaciones.filter(p => efs.includes(p.id_efector));
 
-    setAvailableServicios(prev => prev.filter(id => serviciosPosibles.includes(id)));
-    setAvailableEspecialidades(prev => prev.filter(id => especialidadesPosibles.includes(id)));
-  }, [efectorPlantillas, servicios, especialidades]);
+    // Servicios posibles según efectores
+    const serviciosPosibles = [...new Set(posibles.map(p => p.id_servicio))];
+    setAvailableServicios(serviciosPosibles);
+
+    // Si ya hay servicios seleccionados, filtramos especialidades
+    if (selectedServicios.length > 0) {
+      const especialidadesPosibles = combinaciones
+        .filter(p =>
+          efs.includes(p.id_efector) &&
+          selectedServicios.includes(p.id_servicio)
+        )
+        .map(p => p.id_especialidad);
+
+      setAvailableEspecialidades([...new Set(especialidadesPosibles)]);
+    } else {
+      // Si no hay servicios seleccionados, resetear a todas posibles
+      const todasEspecialidades = posibles.map(p => p.id_especialidad);
+      setAvailableEspecialidades([...new Set(todasEspecialidades)]);
+    }
+  }, [ selectedEfectores]);
 
   const filterByServ = useCallback((servs: number[]) => {
     if (servs.length === 0) {
-      setSelectedEspecialidades([])
-      setAvailableEfectores(efectores.map(e => e.id))
-
-      if(selectedEfectores.length === 0){
-        setAvailableServicios(servicios.map(s => s.id))
-        setAvailableEspecialidades(especialidades.map(e => e.id))
-      }
-      else{
-          const posibles = efectorPlantillas.filter(p => selectedEfectores.includes(p.id_efector));
-          setAvailableServicios(posibles.map(p => p.id_servicio))
-          setAvailableEspecialidades(posibles.map(p => p.id_especialidad))
-      }
-
+      setSelectedEspecialidades([]);
+      setAvailableEspecialidades(especialidades.map(e => e.id));
       return;
     }
 
-    const posibles = efectorPlantillas.filter(p => servs.includes(p.id_servicio));
-    const efectoresPosibles = [...new Set(posibles.map(p => p.id_efector))];
+    const posibles = combinaciones.filter(p =>
+      servs.includes(p.id_servicio) &&
+      selectedEfectores.includes(p.id_efector)
+    );
+
     const especialidadesPosibles = [...new Set(posibles.map(p => p.id_especialidad))];
+    setAvailableEspecialidades(especialidadesPosibles);
 
-    setAvailableEfectores(prev => prev.filter(id => efectoresPosibles.includes(id)));
-    setAvailableEspecialidades(prev => prev.filter(id => especialidadesPosibles.includes(id)));
-  }, [efectorPlantillas, efectores, especialidades]);
-
-
-  const filterByEsp = useCallback((esps: number[]) => {
-    if (esps.length === 0) {
-      if(selectedEfectores.length === 0 && selectedEspecialidades.length != 0){
-        const posibles = efectorPlantillas.filter(p => selectedServicios.includes(p.id_servicio));
-        setAvailableEfectores(posibles.map(p => p.id_efector))
-      }
-      else if(selectedEfectores.length != 0 && selectedEspecialidades.length != 0){
-        const posibles = efectorPlantillas.filter(p => selectedServicios.includes(p.id_servicio) && 
-                                                      selectedEfectores.includes(p.id_efector));
-        setAvailableEspecialidades(posibles.map(p => p.id_especialidad))
-      }
-      return;
-    }
-
-    const posibles = efectorPlantillas.filter(p => esps.includes(p.id_especialidad));
-    const efectoresPosibles = [...new Set(posibles.map(p => p.id_efector))];
-
-    // Intersectar con los disponibles actuales
-    setAvailableEfectores(prev => prev.filter(id => efectoresPosibles.includes(id)));
-  }, [efectorPlantillas]);
+  }, [selectedServicios]);
 
 
   const getCount = async () => {
@@ -174,7 +139,7 @@ function InitPage() {
         serviciosParam,
         especialidadesParam,
         efectoresParam,
-        0
+        1
       );
 
       // adaptarse a la forma que devuelve tu API; se asume:
@@ -203,9 +168,6 @@ function InitPage() {
     filterByServ(selectedServicios);
   }, [selectedServicios, filterByServ]);
 
-  useEffect(() => {
-    filterByEsp(selectedEspecialidades);
-  }, [selectedEspecialidades, filterByEsp]);
 
   // Obtener conteo cuando cambian las selecciones
   useEffect(() => {
@@ -297,7 +259,6 @@ function InitPage() {
             </MenuItem>
 
             {efectores
-              .filter(e => availableEfectores.includes(e.id))
               .map(e => (
                 <MenuItem
                   key={e.id}
@@ -315,17 +276,29 @@ function InitPage() {
         {/* Servicio */}
         <Box sx={{ textAlign: "center" }}>
           <IconButton
-            onClick={(e) => setAnchorServicio(e.currentTarget)}
-            sx={{ width: 120, height: 120, borderRadius: 3 }}
+            // sólo abre el menú si NO está deshabilitado
+            onClick={(e) => {
+              if (selectedEfectores.length === 0) return;
+              setAnchorServicio(e.currentTarget)
+            }}
+            sx={{
+              width: 120,
+              height: 120,
+              borderRadius: 3,
+              // oscurecer cuando está deshabilitado
+              filter: selectedEfectores.length === 0 ? "brightness(0.75)" : "none",
+              cursor: selectedEfectores.length === 0 ? "default" : "pointer",
+            }}
             aria-label="servicios"
+            aria-disabled={selectedEfectores.length === 0}
+            tabIndex={selectedEfectores.length === 0 ? -1 : 0}
           >
-          <img src={MedicalReportIcon} alt="Hospital" width={64} height={64} />
-            </IconButton>
+            <img src={MedicalReportIcon} alt="Hospital" width={64} height={64} />
+          </IconButton>
 
           <Stack direction="row" spacing={1} justifyContent="center" sx={{ mt: 1, flexWrap: 'wrap', maxWidth: 220 }}>
             {selectedServicios.length === 0 ? (
               <Chip label="Todos los servicios" size="small" sx={{ backgroundColor: '#1976d2', color: 'white' }} />
-              
             ) : (
               selectedServicios.map(id => {
                 const s = servicios.find(x => x.id === id)
@@ -372,6 +345,7 @@ function InitPage() {
               ))}
           </Menu>
         </Box>
+
 
         {/* Especialidad */}
         <Box sx={{ textAlign: "center" }}>
@@ -476,12 +450,15 @@ function InitPage() {
         </Card>
       </Box>
 
-  <Box sx={{ textAlign: "center", mt: 3, display: "flex", justifyContent: "center", gap: 2 }}>
+  <Box sx={{ textAlign: "center", mt: 3, display: "flex", justifyContent: "center", gap: 3 }}>
     <Button variant="contained" disableElevation onClick={() => navigate('/turnos')}>
       Turnos
     </Button>
     <Button variant="contained" disableElevation onClick={() => navigate('/list')}>
       Configuración
+    </Button>
+    <Button variant="contained" disableElevation onClick={() => navigate('/espera')}>
+      Espera
     </Button>
   </Box>
 

@@ -1,8 +1,7 @@
-// HistoricoPage.tsx
 import React, { useState, useMemo, useCallback } from 'react';
 import {
   Box, Button, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  TextField, Typography, CircularProgress, Tooltip, IconButton, Menu, MenuItem, Chip
+  TextField, Typography, CircularProgress, Tooltip, IconButton, Menu, MenuItem, Chip, Popover, FormGroup, FormControlLabel, Checkbox, Skeleton
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
@@ -10,6 +9,7 @@ import DownloadIcon from '@mui/icons-material/Download';
 import ViewColumnIcon from '@mui/icons-material/ViewColumn';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
+import { AnimatePresence, motion } from 'framer-motion';
 import { getHistoricoTurno } from '../features/turno/api'; // adapta si tu ruta es distinta
 
 // ---------------------- Tipos ----------------------
@@ -48,12 +48,10 @@ const ALL_COLUMNS = [
 ] as const;
 
 // ---------------------- Helpers ----------------------
-const safeFormat = (iso?: string | null) => {
+const safeFormat = (iso: Date | null) => {
   if (!iso) return '—';
   try {
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return String(iso);
-    return d.toLocaleString();
+    return iso.toLocaleString();
   } catch {
     return String(iso);
   }
@@ -84,11 +82,24 @@ const downloadCSV = (rows: HistoricoItem[], visibleKeys: string[], columnsMap: R
 
 const estadoColor = (estado?: string | null) => {
   if (!estado) return 'default';
-  const e = String(estado).toLowerCase();
-  if (e.includes('cancel')) return 'error';
-  if (e.includes('conf') || e.includes('confirm')) return 'success';
-  if (e.includes('pend') || e.includes('espera') || e.includes('pending')) return 'warning';
-  return 'default';
+  const e = String(estado).trim().toUpperCase();
+  switch (e) {
+    case 'LIBRE': return 'success';
+    case 'SUSPENDIDO': return 'warning';
+    case 'ASIGNADO': return 'info';
+    case 'ATENDIDO': return 'success';
+    case 'AUSENTE': return 'error';
+    case 'RECEPCIONADO': return 'info';
+    case 'ELIMINADO': return 'error';
+    case 'REPROGRAMADO': return 'warning';
+    default: {
+      const el = e.toLowerCase();
+      if (el.includes('cancel')) return 'error';
+      if (el.includes('conf') || el.includes('confirm')) return 'success';
+      if (el.includes('pend') || el.includes('espera') || el.includes('pending')) return 'warning';
+      return 'default';
+    }
+  }
 };
 
 // ---------------------- Componente ----------------------
@@ -100,7 +111,7 @@ export default function HistoricoPage(): JSX.Element {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // columnas visibles
+  // columnas visibles (comportamiento original: todas visibles por defecto)
   const initialVisibility = useMemo(() => {
     const map: Record<string, boolean> = {};
     ALL_COLUMNS.forEach(c => (map[c.key] = true));
@@ -108,7 +119,7 @@ export default function HistoricoPage(): JSX.Element {
   }, []);
   const [visibleCols, setVisibleCols] = useState<Record<string, boolean>>(initialVisibility);
 
-  // menú de columnas
+  // popover / menu de columnas
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const openColsMenu = Boolean(anchorEl);
   const handleOpenColsMenu = (e: React.MouseEvent<HTMLElement>) => setAnchorEl(e.currentTarget);
@@ -122,7 +133,7 @@ export default function HistoricoPage(): JSX.Element {
   const validateDni = useCallback((val: string) => {
     const trimmed = val.trim();
     if (!trimmed) return "El DNI es requerido";
-    if (!/^\d{3,15}$/.test(trimmed)) return "DNI inválido (sólo dígitos, 3-15 caracteres)";
+    if (!/^\d{7,11}$/.test(trimmed)) return "DNI inválido";
     return null;
   }, []);
 
@@ -195,14 +206,22 @@ export default function HistoricoPage(): JSX.Element {
     }
   };
 
+  // ancho mínimo dinámico para forzar scroll horizontal cuando haya muchas columnas
+  const tableMinWidth = useMemo(() => Math.max(visibleKeys.length * 120, 600), [visibleKeys]);
+
   return (
-    <Box className="p-4">
+    <Box sx={{ p: 3 }}>
       <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
-        <Typography variant="h5" fontWeight={600}>Histórico de Turnos por paciente</Typography>
-        <Box display="flex" gap={1}>
+        <Box>
+          <Typography variant="h5" fontWeight={700}>Histórico de Turnos por paciente</Typography>
+          <Typography variant="caption" color="text.secondary">Búsqueda por DNI y tabla interactiva</Typography>
+        </Box>
+
+        <Box display="flex" gap={1} alignItems="center">
           <Tooltip title="Columnas">
             <IconButton onClick={handleOpenColsMenu}><ViewColumnIcon /></IconButton>
           </Tooltip>
+
           <Tooltip title="Descargar CSV">
             <span>
               <IconButton
@@ -259,49 +278,64 @@ export default function HistoricoPage(): JSX.Element {
         )}
       </Paper>
 
-      {/* Menu columnas */}
-      <Menu anchorEl={anchorEl} open={openColsMenu} onClose={handleCloseColsMenu}>
-        <MenuItem onClick={() => { showAll(); handleCloseColsMenu(); }}>Mostrar todo</MenuItem>
-        <MenuItem onClick={() => { hideAll(); handleCloseColsMenu(); }}>Ocultar todo</MenuItem>
-        <Box sx={{ px: 2, py: 1 }}>
-          {ALL_COLUMNS.map(col => (
-            <Box key={col.key} display="flex" alignItems="center" justifyContent="space-between" mb={0.5}>
-              <Typography variant="body2">{col.label}</Typography>
-              <Button size="small" onClick={() => toggleColumn(col.key)} variant={visibleCols[col.key] ? 'contained' : 'outlined'}>
-                {visibleCols[col.key] ? 'Ocultar' : 'Mostrar'}
-              </Button>
+      {/* Popover columnas (más visual y con checkboxes) */}
+      <Popover
+        open={openColsMenu}
+        anchorEl={anchorEl}
+        onClose={handleCloseColsMenu}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Box sx={{ p: 2, minWidth: 260 }}>
+          <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+            <Typography variant="subtitle2">Columnas</Typography>
+            <Box>
+              <Button size="small" onClick={() => { showAll(); handleCloseColsMenu(); }} sx={{ mr: 1 }}>Mostrar todo</Button>
+              <Button size="small" onClick={() => { hideAll(); handleCloseColsMenu(); }}>Ocultar todo</Button>
             </Box>
-          ))}
+          </Box>
+
+          <FormGroup>
+            {ALL_COLUMNS.map(col => (
+              <FormControlLabel
+                key={col.key}
+                control={<Checkbox checked={Boolean(visibleCols[col.key])} onChange={() => toggleColumn(col.key)} />}
+                label={col.label}
+              />
+            ))}
+          </FormGroup>
         </Box>
-      </Menu>
+      </Popover>
 
       {/* Tabla */}
-      <TableContainer component={Paper}>
-        <Table size="small">
+      <TableContainer component={Paper} sx={{ borderRadius: 2, overflowX: 'auto' }}>
+        <Table size="small" stickyHeader sx={{ minWidth: tableMinWidth }}>
           <TableHead>
-            <TableRow>
+            <TableRow sx={{ background: (theme) => theme.palette.background.paper }}>
               {ALL_COLUMNS.filter(c => visibleCols[c.key]).map(col => (
-                <TableCell key={col.key} sx={{ fontWeight: 600 }}>
-                  {col.label}
-                  {col.key === 'fecha_hora_mdf' && (
-                    <IconButton size="small" onClick={toggleSort} sx={{ ml: 1 }}>
-                      {sortDesc ? <ArrowDownwardIcon fontSize="small" /> : <ArrowUpwardIcon fontSize="small" />}
-                    </IconButton>
-                  )}
+                <TableCell key={col.key} sx={{ fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140, py: 0.5, px: 1 }}> 
+                  <Box display="flex" alignItems="center">
+                    <span>{col.label}</span>
+                    {col.key === 'fecha_hora_mdf' && (
+                      <IconButton size="small" onClick={toggleSort} sx={{ ml: 1 }}>
+                        {sortDesc ? <ArrowDownwardIcon fontSize="small" /> : <ArrowUpwardIcon fontSize="small" />}
+                      </IconButton>
+                    )}
+                  </Box>
                 </TableCell>
               ))}
             </TableRow>
           </TableHead>
+
           <TableBody>
             {loading && (
-              <TableRow>
-                <TableCell colSpan={Math.max(1, visibleKeys.length)}>
-                  <Box display="flex" alignItems="center" gap={2} p={2}>
-                    <CircularProgress size={18} />
-                    <Typography>Cargando histórico...</Typography>
-                  </Box>
-                </TableCell>
-              </TableRow>
+              // skeletons para mejorar la percepción de carga
+              Array.from({ length: 6 }).map((_, i) => (
+                <TableRow key={`sk-${i}`}>
+                  {ALL_COLUMNS.filter(c => visibleCols[c.key]).map((col, j) => (
+                    <TableCell key={j}><Skeleton variant="text" /></TableCell>
+                  ))}
+                </TableRow>
+              ))
             )}
 
             {!loading && displayedRows.length === 0 && (
@@ -312,43 +346,55 @@ export default function HistoricoPage(): JSX.Element {
               </TableRow>
             )}
 
-            {!loading && displayedRows.map((r, idx) => (
-              <TableRow key={r.idturno ?? idx}>
-                {ALL_COLUMNS.filter(c => visibleCols[c.key]).map(col => {
-                  const key = col.key as keyof HistoricoItem;
-                  switch (col.key) {
-                    case 'idturno': return <TableCell key={col.key}>{r.idturno ?? '—'}</TableCell>;
-                    case 'fecha_hora_mdf': return <TableCell key={col.key}>{safeFormat(r.fecha_hora_mdf)}</TableCell>;
-                    case 'estado':
-                      return (
-                        <TableCell key={col.key}>
-                          {r.estado ? (
-                            <Tooltip title={String(r.estado)}>
-                              <Chip
-                                label={String(r.estado)}
-                                size="small"
-                                variant="outlined"
-                                color={estadoColor(r.estado) as any}
-                              />
-                            </Tooltip>
-                          ) : '—'}
-                        </TableCell>
-                      );
-                    case 'nro_doc': return <TableCell key={col.key}>{r.nro_doc ?? '—'}</TableCell>;
-                    case 'paciente_nombre': return <TableCell key={col.key}>{r.paciente_nombre ?? '—'}</TableCell>;
-                    case 'paciente_apellido': return <TableCell key={col.key}>{r.paciente_apellido ?? '—'}</TableCell>;
-                    case 'efector': return <TableCell key={col.key}>{r.efector ?? '—'}</TableCell>;
-                    case 'servicio': return <TableCell key={col.key}>{r.servicio ?? '—'}</TableCell>;
-                    case 'especialidad': return <TableCell key={col.key}>{r.especialidad ?? '—'}</TableCell>;
-                    case 'nombre_profesional': return <TableCell key={col.key}>{r.nombre_profesional ?? '—'}</TableCell>;
-                    case 'apellido_profesional': return <TableCell key={col.key}>{r.apellido_profesional ?? '—'}</TableCell>;
-                    case 'fecha': return <TableCell key={col.key}>{safeFormat(r.fecha)}</TableCell>;
-                    case 'hora': return <TableCell key={col.key}>{r.hora ?? '—'}</TableCell>;
-                    default: return <TableCell key={col.key}>{String((r as any)[key] ?? '—')}</TableCell>;
-                  }
-                })}
-              </TableRow>
-            ))}
+            <AnimatePresence initial={false} mode="popLayout">
+              {!loading && displayedRows.map((r, idx) => (
+                <TableRow
+                  component={motion.tr}
+                  layout
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.18 }}
+                  key={r.idturno ?? idx}
+                  sx={{ '&:hover': { boxShadow: 3 } }}
+                >
+                  {ALL_COLUMNS.filter(c => visibleCols[c.key]).map(col => {
+                    const key = col.key as keyof HistoricoItem;
+                    switch (col.key) {
+                      case 'idturno': return <TableCell key={col.key} sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140, py: 0.5, px: 1 }}>{r.idturno ?? '—'}</TableCell>;
+                      case 'fecha_hora_mdf': return <TableCell key={col.key} sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140, py: 0.5, px: 1 }}>{safeFormat(r.fecha_hora_mdf)}</TableCell>;
+                      case 'estado':
+                        return (
+                          <TableCell key={col.key} sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140, py: 0.5, px: 1 }}>
+                            {r.estado ? (
+                              <Tooltip title={String(r.estado)}>
+                                <Chip
+                                  label={String(r.estado)}
+                                  size="small"
+                                  variant="outlined"
+                                  color={estadoColor(r.estado) as any}
+                                />
+                              </Tooltip>
+                            ) : '—'}
+                          </TableCell>
+                        );
+                      case 'nro_doc': return <TableCell key={col.key} sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140, py: 0.5, px: 1 }}>{r.nro_doc ?? '—'}</TableCell>;
+                      case 'paciente_nombre': return <TableCell key={col.key} sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140, py: 0.5, px: 1 }}>{r.paciente_nombre ?? '—'}</TableCell>;
+                      case 'paciente_apellido': return <TableCell key={col.key} sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140, py: 0.5, px: 1 }}>{r.paciente_apellido ?? '—'}</TableCell>;
+                      case 'efector': return <TableCell key={col.key} sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140, py: 0.5, px: 1 }}>{r.efector ?? '—'}</TableCell>;
+                      case 'servicio': return <TableCell key={col.key} sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140, py: 0.5, px: 1 }}>{r.servicio ?? '—'}</TableCell>;
+                      case 'especialidad': return <TableCell key={col.key} sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140, py: 0.5, px: 1 }}>{r.especialidad ?? '—'}</TableCell>;
+                      case 'nombre_profesional': return <TableCell key={col.key} sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140, py: 0.5, px: 1 }}>{r.nombre_profesional ?? '—'}</TableCell>;
+                      case 'apellido_profesional': return <TableCell key={col.key} sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140, py: 0.5, px: 1 }}>{r.apellido_profesional ?? '—'}</TableCell>;
+                      case 'fecha': return <TableCell key={col.key} sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140, py: 0.5, px: 1 }}>{safeFormat(r.fecha)}</TableCell>;
+                      case 'hora': return <TableCell key={col.key} sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140, py: 0.5, px: 1 }}>{r.hora ?? '—'}</TableCell>;
+                      default: return <TableCell key={col.key} sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140, py: 0.5, px: 1 }}>{String((r as any)[key] ?? '—')}</TableCell>;
+                    }
+                  })}
+                </TableRow>
+              ))}
+            </AnimatePresence>
+
           </TableBody>
         </Table>
       </TableContainer>
@@ -356,7 +402,7 @@ export default function HistoricoPage(): JSX.Element {
       <Box mt={2} display="flex" justifyContent="space-between" alignItems="center">
         <Typography variant="body2">Mostrando {displayedRows.length} registros.</Typography>
         <Box>
-          <Button onClick={() => downloadCSV(displayedRows, visibleKeys, columnsMap)} disabled={displayedRows.length === 0}>
+          <Button onClick={() => downloadCSV(displayedRows, visibleKeys, columnsMap)} disabled={displayedRows.length === 0} startIcon={<DownloadIcon />}>
             Descargar CSV
           </Button>
         </Box>

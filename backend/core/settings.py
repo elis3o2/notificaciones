@@ -19,7 +19,6 @@ STATICFILES_DIRS = [
 
 SECRET_KEY = config('DJANGO_SECRET_KEY')
 
-DEBUG = True
 
 AUTH_USER_MODEL = 'src.CustomUser'
 
@@ -27,16 +26,18 @@ USE_TZ = False
 TIME_ZONE = "America/Argentina/Buenos_Aires"
 CELERY_TIMEZONE = "America/Argentina/Buenos_Aires"
 
-
+DEBUG = True
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost', cast=Csv())
+CORS_ALLOW_ALL_ORIGINS = True
 
 INSTALLED_APPS = [
-    'django.contrib.auth',
+    'src',
+    "django.contrib.admin",
+    "django.contrib.auth", 
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'src',
     'rest_framework',
     'corsheaders',
     'rest_framework_simplejwt',
@@ -54,7 +55,6 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware'
 ]
 
-CORS_ALLOWED_ORIGINS = config('CORS_ORIGIN', cast=Csv())
 
 ROOT_URLCONF = 'core.urls'
 
@@ -118,7 +118,6 @@ LANGUAGE_CODE = 'en-us'
 USE_I18N = True
 
 
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -126,6 +125,7 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
+        #'rest_framework.permissions.AllowAny',
     ),
 }
 
@@ -138,7 +138,7 @@ SIMPLE_JWT = {
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
-DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 
 # Redis como broker
