@@ -12,14 +12,15 @@ from django.db import connections, DatabaseError
 from django.core.cache import cache
 from src.models import (Plantilla,  EstadoMsj, EstadoTurno, Turno, TurnoEspera,
                         Mensaje, Efector,Servicio, Especialidad, EfeSerEspPlantilla,
-                        EfeSerEsp)
+                        EfeSerEsp, EstudioRequerido)
 
 from src.serializers import(PlantillaSerializer, EstadoMsjSerializer, EstadoTurnoSerializer,
                 TurnoSerializer, TurnoEsperaSerializer, MensajeSerializer,
                 EfectorSerializer, ServicioSerializer,EspecialidadSerializer, EfeSerEspPlantillaSerializer, EfeSerEspPlantillaDetailSerializer,
                 CustomTokenObtainPairSerializer,  TurnoMergedSerializer, HistoricoPacienteSerializer, 
                 PacienteSerializer, ProfesionalSerializer, EfeSerEspSerializer, EfeSerEspEfectorSerializer,
-                EfeSerEspCompletoSerializer, TurnoEsperaCreateSerializer, TurnoEsperaCloseSerializer )
+                EfeSerEspCompletoSerializer, TurnoEsperaCreateSerializer, TurnoEsperaCloseSerializer,
+                EstudioRequeridoSerializer )
 
 from src.utils import enviar_whatsapp, get_actual_state, fetch_paciente, fetch_profesional
 import logging
@@ -332,6 +333,11 @@ class TurnoEsperaViewSet(viewsets.ModelViewSet):
         )
 
         
+
+class EstudioRequeridoViewSet(viewsets.ModelViewSet):
+    serializer_class = EstudioRequeridoSerializer
+    queryset = EstudioRequerido.objects.all()
+    
 
 
 class CustomTokenObtainPairView(TokenObtainPairView):

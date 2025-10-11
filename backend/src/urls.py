@@ -8,7 +8,7 @@ from src.views import (
     EfeSerEspPlantillaViewSet, CustomTokenObtainPairView, ServicioViwSet,
     SendWSP, TurnosMergedAllAPIView, GetEstadoMSJ, HistoricoPaciente,
     GetPacienteAPIView, GetProfesionalAPIView,TurnoEsperaViewSet,
-    EfeSerEspViewSet
+    EfeSerEspViewSet, EstudioRequeridoViewSet
 )
 
 router = DefaultRouter()
@@ -23,6 +23,7 @@ router.register('servicios', ServicioViwSet, basename='servicio')
 router.register('efe_ser_esp_plantilla', EfeSerEspPlantillaViewSet, basename='efe_ser_esp_plantilla')
 router.register('turno_espera', TurnoEsperaViewSet, basename='turno_espera')
 router.register('efe_ser_esp', EfeSerEspViewSet, basename='efe_ser_esp')
+router.register('estudio_requerido', EstudioRequeridoViewSet, basename='estudio_requerido')
 
 # src/urls.py
 urlpatterns = [

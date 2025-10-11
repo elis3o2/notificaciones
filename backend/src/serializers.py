@@ -6,7 +6,7 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework import serializers
 from src.models import (Plantilla, EstadoMsj, EstadoTurno,
                 Turno, Mensaje, Efector, Servicio, Especialidad, EfeSerEspPlantilla,
-                EstadoTurnoEspera, TurnoEspera, EfeSerEsp)
+                EstadoTurnoEspera, TurnoEspera, EfeSerEsp, EstudioRequerido)
 from src.utils import fetch_paciente, fetch_profesional
 import re
 from django.utils import timezone
@@ -241,6 +241,10 @@ class TurnoEsperaSerializer(serializers.ModelSerializer):
 
 
 class TurnoEsperaCreateSerializer(serializers.ModelSerializer):
+    
+    estudio_requerido = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=EstudioRequerido.objects.all()
+    )
     class Meta:
         model = TurnoEspera
         fields = (
@@ -249,6 +253,7 @@ class TurnoEsperaCreateSerializer(serializers.ModelSerializer):
             "id_profesional_solicitante",
             "id_paciente",
             "prioridad",
+            "estudio_requerido"
         )
         read_only_fields = ("usuario_creacion", "fecha_hora_creacion", "id_estado")
 
@@ -283,6 +288,12 @@ class TurnoEsperaCloseSerializer(serializers.ModelSerializer):
 
         return instance
 
+
+
+class EstudioRequeridoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EstudioRequerido
+        fields = '__all__'
 
 from datetime import datetime, date
 
@@ -388,6 +399,7 @@ class TurnoMergedSerializer(serializers.ModelSerializer):
             }
             for m in mensajes
         ]
+
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:

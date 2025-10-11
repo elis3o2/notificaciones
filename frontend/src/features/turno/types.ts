@@ -1,6 +1,5 @@
 import type { Efector, Servicio, EfeSerEsp, Especialidad, EfeSerEspCompleto } from "../efe_ser_esp/types";
 import type { Paciente, Profesional, User } from "../persona/types";
-import { DateTime } from "luxon";
 
 export interface Turno {
     id: number;
@@ -24,6 +23,7 @@ export interface TurnoEspera {
     efector_solicitante: Efector;
     paciente: Paciente;
     prioridad: number;
+    estudio_requerido:  EstudioRequerido[];
     fecha_hora_creacion: string;
     fecha_hora_cierre: string | null;
     usuario_creacion: User;
@@ -58,4 +58,9 @@ export interface TurnoExtend {
     profesional_nombre: string | null;
     profesional_apellido: string | null;
     mensaje_asociado: any[] | null;
+}
+
+export interface EstudioRequerido {
+    id: number,
+    nombre: string
 }

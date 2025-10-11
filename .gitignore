@@ -8,3 +8,4 @@ backend/core/__pycache__
 backend/src/__pycache__
 backend/src/migrations
 frontend/.env
+backend/core/informix_jdbc_backend/__pycache__

@@ -1,5 +1,5 @@
 import http from '../../common/api/client'
-import type { Turno, TurnoEspera, TurnoExtend, EstadoMsj, EstadoTurno } from './types';
+import type { Turno, TurnoEspera, TurnoExtend, EstadoMsj, EstadoTurno, EstudioRequerido } from './types';
 
 export const getTurnosAll = (
   id_servicio?: number,
@@ -149,3 +149,6 @@ export const getTurnoEsperaById= (id: number) => {
   return http.get(`turno_espera/paciente/?id=${id}`).then(res => res.data);
 }
 
+export const getEstudioRequeridoAll = () => {
+  return http.get<EstudioRequerido[]>(`estudio_requerido/`).then(res => res.data)
+} 

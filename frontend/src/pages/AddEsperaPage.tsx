@@ -21,6 +21,8 @@ import type { Paciente, Profesional } from "../features/persona/types";
 import LookPaciente from "../features/turno/components/LookPaciente";
 import LookProfesional from "../features/turno/components/LookProfesional";
 import LookEfeSerEsp from "../features/turno/components/LookEfeSerEsp";
+import LookEstudioRequerido from "../features/turno/components/LookEstudioRequerido";
+import type { EstudioRequerido } from "../features/turno/types";
 import Snackbar from "@mui/material/Snackbar";
 import Alert from "@mui/material/Alert";
 
@@ -48,6 +50,10 @@ export default function AddEspera(): JSX.Element {
   const [efeSerEspSeleccionado, setEfeSerEspSeleccionado] =
     useState<EfeSerEspCompleto | null>(null);
   const [finishEfeSerEsp, setFinishEfeSerEsp] = useState(false);
+
+  // NUEVO: estados para estudios requeridos
+  const [estudioRequerido, setEstudioRequerido] = useState<EstudioRequerido[]>([]);
+  const [finishEstudioRequerido, setFinishEstudioRequerido] = useState(false);
 
   // prioridad: "baja" | "media" | "alta" | null
   const [priority, setPriority] = useState<string | null>(null);
@@ -111,11 +117,19 @@ export default function AddEspera(): JSX.Element {
     setEfeSerEspSeleccionado(null);
     setFinishEfeSerEsp(false);
     setPriority(null);
+    // limpio también los estudios requeridos al cambiar la especialidad/servicio
+    setEstudioRequerido([]);
+    setFinishEstudioRequerido(false);
   };
 
   // puede seleccionarse prioridad solo si todas las selecciones anteriores están hechas
+  // ahora se requiere además que los estudios requeridos estén confirmados (finishEstudioRequerido)
   const canSelectPriority = Boolean(
-    (efector || efectorId) && paciente && profesional && efeSerEspSeleccionado
+    (efector || efectorId) &&
+      paciente &&
+      profesional &&
+      efeSerEspSeleccionado &&
+      finishEstudioRequerido
   );
 
   // si por cualquier motivo canSelectPriority deja de cumplirse, limpiamos priority
@@ -320,6 +334,17 @@ export default function AddEspera(): JSX.Element {
             </Stack>
           </Paper>
         )
+      )}
+
+      {/* -- NUEVO: Mostrar selector de Estudios Requeridos justo después de elegir EfeSerEsp y antes de prioridad -- */}
+      {  !finishEstudioRequerido && (
+        <Box sx={{ mb: 2 }}>
+          <LookEstudioRequerido
+            estudioRequerido={estudioRequerido}
+            setEstudioRequerido={setEstudioRequerido}
+            setFinishEstudioRequerido={setFinishEstudioRequerido}
+          />
+        </Box>
       )}
 
       <Divider sx={{ my: 2 }} />

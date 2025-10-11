@@ -11,6 +11,7 @@ import HistoricoPage from '../pages/HistoricoPage';
 import ListaEspera from '../pages/ListaEsperaPage';
 import AddEspera from '../pages/AddEsperaPage';
 import TurnosEsperaDashboard from '../pages/EsperaHistoricoPage';
+import LookEstudioRequerido from '../features/turno/components/LookEstudioRequerido';
 const AppRoutes = () => {
   return (
     <Routes>
@@ -35,6 +36,7 @@ const AppRoutes = () => {
         <Route path="/espera" element={<ListaEspera />}/>
         <Route path="/add-espera" element={<AddEspera />}/>
         <Route path="/espera-paciente" element={<TurnosEsperaDashboard />}/>
+        <Route path='/requerido'  element={<LookEstudioRequerido />}/>
         <Route path='*' element={<Navigate to="/home" replace />} />
       </Route>
     </Routes>
