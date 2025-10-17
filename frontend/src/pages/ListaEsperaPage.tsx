@@ -26,6 +26,7 @@ import {
   Divider,
   Snackbar,
   Alert,
+  Chip, // <-- agregado
 } from "@mui/material";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
@@ -553,6 +554,21 @@ const telefonoEstado = (carac: string | null, nro: string | null) => {
               <Typography variant="body2" sx={{ mb: 0.5 }}>
                 <strong>Días en espera:</strong> {diasEnEsperaNumber(activeTurno)}
               </Typography>
+
+              {/* -- NUEVO: lista de estudios requeridos -- */}
+              {activeTurno.estudio_requerido && activeTurno.estudio_requerido.length > 0 && (
+                <>
+                  <Divider sx={{ my: 1 }} />
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+                    Estudios requeridos
+                  </Typography>
+                  <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
+                    {activeTurno.estudio_requerido.map((s) => (
+                      <Chip key={s.id} label={s.nombre ?? `#${s.id}`} size="small" sx={{ mb: 0.5 }} />
+                    ))}
+                  </Stack>
+                </>
+              )}
             </Box>
           ) : (
             <Typography>Sin datos</Typography>

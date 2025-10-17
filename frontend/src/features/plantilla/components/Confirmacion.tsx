@@ -118,7 +118,6 @@ const Confirmacion = ({
       
       settled.forEach((res, idx) => {
         const esp = confirmEspecialidades[idx];
-       console.log("ESP",esp)
         if (res.status === "fulfilled") {
           updated++;
           // ahora pasamos también field/value al callback para que el padre actualice correctamente

@@ -209,8 +209,8 @@ class DatabaseWrapper(BaseDatabaseWrapper):
         - que la JVM se arranque sólo una vez por proceso (uso de lock),
         - que el hilo actual quede adjuntado a la JVM si ésta ya estaba iniciada.
         """
-        informix_jar = "/home/imusaprueba/Descargas/jdbc-4.50.10.jar"
-        bson_jar = "/home/imusaprueba/Descargas/bson-4.10.2.jar"
+        informix_jar = "/home/imusaprueba/jdbc-4.50.10.jar"
+        bson_jar = "/home/imusaprueba/bson-4.10.2.jar"
         classpath = f"{informix_jar}:{bson_jar}"
 
         jdbc_url = (

@@ -134,10 +134,10 @@ export const getTurnoEsperaAbierto = (id: number) :Promise<TurnoEspera[]> =>{
 
 
 export const postTurnoEspera = (id_efe_ser_esp: number, id_profesional_solicitante: number,
-  id_efector_solicitante: number,id_paciente:number, prioridad: number ) => {
+  id_efector_solicitante: number,id_paciente:number, estudio_requerido: number[], prioridad: number ) => {
   
     return http.post("turno_espera/", {id_efe_ser_esp,id_profesional_solicitante,
-    id_efector_solicitante,id_paciente, prioridad,});
+    id_efector_solicitante,id_paciente,estudio_requerido, prioridad,});
 };
 
 

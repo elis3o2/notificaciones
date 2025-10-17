@@ -154,7 +154,6 @@ const Servicios = ({
 
     // toggle deselect: si ya estaba seleccionado lo removemos y ocultamos sus especialidades
     if (servicioSeleccionado.some(s => s.id === servicio.id)) {
-
       setEspecialidades(prev => prev.filter(es => es.id_servicio != servicio.id));
       setServicioSeleccionado(prev => prev.filter(s => s.id !== servicio.id));
       return;
@@ -164,7 +163,6 @@ const Servicios = ({
 
     // 1) obtener efectores asociados al servicio pero solo los seleccionados
     const efIdsForService: number[] = (servicioEfectorActual[servId] ?? []).filter(id => selectedEfIds.has(id));
-
 
     // 2) recopilar plantillas desde la cache y detectar faltantes
     const cachedPlantillas: EfeSerEspPlantillaExtend[] = [];
@@ -181,19 +179,9 @@ const Servicios = ({
 
     // 3) Si no hay faltantes usamos la cache y terminamos
     if (missingEfIds.length === 0) {
-      // deduplicar plantillas por id
-      const dedup = new Map<number, EfeSerEspPlantillaExtend>();
-      for (const p of cachedPlantillas) dedup.set(p.id, p);
-
-      // extraer especialidades deduplicadas
-      const espMap = new Map<number, EfeSerEspPlantillaExtend>();
-      for (const p of dedup.values()) espMap.set(p.especialidad.id, p);
-
-      // combinar con prev (evitar duplicados)
-      const prevMap = new Map<number, EfeSerEspPlantillaExtend>(especialidades.map(e => [e.id, e]));
-      for (const [id, esp] of espMap) prevMap.set(id, esp);
-
-      setEspecialidades(Array.from(prevMap.values()));
+      // **NO deduplicamos**: simplemente concatenamos las plantillas cacheadas al array actual
+      const nuevaLista = [...especialidades, ...cachedPlantillas];
+      setEspecialidades(nuevaLista);
       setServicioSeleccionado(prev => [...prev, servicio]);
       return;
     }
@@ -227,23 +215,14 @@ const Servicios = ({
         console.error("setEfecServEspecialidades no es función:", setEfecServEspecialidades);
       }
 
-      // combinar cached + fetched, deduplicar por plantilla.id
+      // combinar cached + fetched **SIN DEDUPLICAR**
       const combinedPlantillas = [
         ...cachedPlantillas,
         ...results.flatMap(r => r.data),
       ];
-      const dedupPlantillas = new Map<number, EfeSerEspPlantillaExtend>();
-      for (const p of combinedPlantillas) dedupPlantillas.set(p.id, p);
 
-      // extraer Especialidad[] deduplicadas
-      const espMap = new Map<number, EfeSerEspPlantillaExtend>();
-      for (const p of dedupPlantillas.values()) espMap.set(p.especialidad.id, p);
-
-      // combinar con prev (evitar duplicados)
-      const prevMap = new Map<number, EfeSerEspPlantillaExtend>(especialidades.map(e => [e.id, e]));
-      for (const [id, esp] of espMap) prevMap.set(id, esp);
-
-      const nuevaLista = Array.from(prevMap.values());
+      // **NO usamos p.especialidad.id** para deduplicar; mantenemos las plantillas tal cual (se usa p.id internamente si es necesario)
+      const nuevaLista = [...especialidades, ...combinedPlantillas];
       setEspecialidades(nuevaLista);
       setServicioSeleccionado(prev => [...prev, servicio]);
 
@@ -260,6 +239,7 @@ const Servicios = ({
       setEspecialidades([]);
     }
   };
+
 
   return (
     <>

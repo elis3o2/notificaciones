@@ -32,7 +32,6 @@ export type HistoricoItem = {
 
 // ---------------------- Columnas ----------------------
 const ALL_COLUMNS = [
-  { key: 'idturno', label: 'ID Turno' },
   { key: 'fecha_hora_mdf', label: 'Última modificación' },
   { key: 'estado', label: 'Estado' },
   { key: 'nro_doc', label: 'DNI' },
@@ -361,7 +360,6 @@ export default function HistoricoPage(): JSX.Element {
                   {ALL_COLUMNS.filter(c => visibleCols[c.key]).map(col => {
                     const key = col.key as keyof HistoricoItem;
                     switch (col.key) {
-                      case 'idturno': return <TableCell key={col.key} sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140, py: 0.5, px: 1 }}>{r.idturno ?? '—'}</TableCell>;
                       case 'fecha_hora_mdf': return <TableCell key={col.key} sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140, py: 0.5, px: 1 }}>{safeFormat(r.fecha_hora_mdf)}</TableCell>;
                       case 'estado':
                         return (

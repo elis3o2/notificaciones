@@ -202,6 +202,12 @@ class ProfesionalSerializer(serializers.Serializer):
     nombre = serializers.CharField(required=False, allow_null=True)
 
 
+
+class EstudioRequeridoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EstudioRequerido
+        fields = '__all__'
+
 class TurnoEsperaSerializer(serializers.ModelSerializer):
     estado = EstadoTurnoEsperaSerializer(source='id_estado', read_only=True)
     efector =  EfectorSerializer(source='id_efe_ser_esp.id_efector', read_only=True)
@@ -211,13 +217,14 @@ class TurnoEsperaSerializer(serializers.ModelSerializer):
     # campos adicionales para paciente y profesional
     paciente = serializers.SerializerMethodField()
     profesional_solicitante = serializers.SerializerMethodField()
-
+    estudio_requerido = EstudioRequeridoSerializer(many=True, read_only=True)
+   
     class Meta:
         model = TurnoEspera
         fields = ["id", "efector", "servicio", "especialidad", "efector_solicitante",
                   "paciente", "profesional_solicitante", "estado", "prioridad",
                   "usuario_cierre", "usuario_creacion", "fecha_hora_creacion", 
-                  "fecha_hora_cierre"]   # incluye los id_..., más los serializer fields
+                  "fecha_hora_cierre", "estudio_requerido"]   # incluye los id_..., más los serializer fields
 
     def get_paciente(self, obj):
         try:
@@ -241,10 +248,10 @@ class TurnoEsperaSerializer(serializers.ModelSerializer):
 
 
 class TurnoEsperaCreateSerializer(serializers.ModelSerializer):
-    
     estudio_requerido = serializers.PrimaryKeyRelatedField(
         many=True, queryset=EstudioRequerido.objects.all()
     )
+
     class Meta:
         model = TurnoEspera
         fields = (
@@ -253,23 +260,53 @@ class TurnoEsperaCreateSerializer(serializers.ModelSerializer):
             "id_profesional_solicitante",
             "id_paciente",
             "prioridad",
-            "estudio_requerido"
+            "estudio_requerido",
         )
         read_only_fields = ("usuario_creacion", "fecha_hora_creacion", "id_estado")
 
     def create(self, validated_data):
+        # Extraer M2M para no pasarlo a Model.objects.create(...)
+        estudios_in = validated_data.pop("estudio_requerido", [])
+
         request = self.context.get("request")
         user = getattr(request, "user", None)
 
-        # Setear usuario y fecha/hora automáticamente
-        validated_data["usuario_creacion"] = user
-        validated_data["fecha_hora_creacion"] = timezone.now()
+        # Setear usuario/fecha si no vienen
+        if user and "usuario_creacion" not in validated_data:
+            validated_data["usuario_creacion"] = user
+        if "fecha_hora_creacion" not in validated_data:
+            validated_data["fecha_hora_creacion"] = timezone.now()
 
-        # Setear estado inicial por defecto (ejemplo: pk=0)
-        validated_data["id_estado"] = EstadoTurnoEspera.objects.get(pk=0)
+        # Estado por defecto (pk=0 o el primero)
+        if "id_estado" not in validated_data:
+            estado = EstadoTurnoEspera.objects.filter(pk=0).first() or EstadoTurnoEspera.objects.first()
+            if estado:
+                validated_data["id_estado"] = estado
 
-        return super().create(validated_data)
+        # Crear la instancia sin M2M
+        instance = TurnoEspera.objects.create(**validated_data)
 
+        # Asociar estudios (acepta lista de IDs o lista de instancias)
+        if estudios_in:
+            # si vienen ids (ints), validamos que existan y usamos el queryset
+            if all(isinstance(x, int) for x in estudios_in):
+                qs = EstudioRequerido.objects.filter(pk__in=estudios_in)
+                found_pks = set(qs.values_list("pk", flat=True))
+                missing = set(estudios_in) - found_pks
+                if missing:
+                    raise serializers.ValidationError({
+                        "estudio_requerido": f"Estudios no encontrados: {sorted(list(missing))}"
+                    })
+                instance.estudio_requerido.set(qs)
+            else:
+                # PrimaryKeyRelatedField normalmente ya devuelve instancias; aceptamos eso
+                instance.estudio_requerido.set(estudios_in)
+        else:
+            # aseguramos que quede vacío si no se envió nada
+            instance.estudio_requerido.clear()
+
+        return instance
+    
 
 class TurnoEsperaCloseSerializer(serializers.ModelSerializer):
     class Meta:

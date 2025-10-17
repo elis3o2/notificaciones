@@ -14,6 +14,7 @@ import FormLabel from "@mui/material/FormLabel";
 import RadioGroup from "@mui/material/RadioGroup";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Radio from "@mui/material/Radio";
+import Chip from "@mui/material/Chip";
 import { postTurnoEspera } from "../features/turno/api";
 import type { Efector, EfeSerEspCompleto } from "../features/efe_ser_esp/types";
 import { getEfectorById } from "../features/efe_ser_esp/api";
@@ -122,6 +123,13 @@ export default function AddEspera(): JSX.Element {
     setFinishEstudioRequerido(false);
   };
 
+  // NUEVO: reset específico para estudios requeridos (tarjeta)
+  const resetEstudioRequerido = () => {
+    setEstudioRequerido([]);
+    setFinishEstudioRequerido(false);
+    setPriority(null);
+  };
+
   // puede seleccionarse prioridad solo si todas las selecciones anteriores están hechas
   // ahora se requiere además que los estudios requeridos estén confirmados (finishEstudioRequerido)
   const canSelectPriority = Boolean(
@@ -163,9 +171,9 @@ export default function AddEspera(): JSX.Element {
       const idEfeSolicitante = efector ? efector.id : efectorId;
       const prioridadNum = mapPriority[priority!];
       const idPaciente = paciente!.id;
-
+      const idsEstudios = estudioRequerido.map(e => e.id)
       // llamada al backend (asegurate que postTurnoEspera devuelva una Promise)
-      await postTurnoEspera(idEfeSerEsp, idProf, idEfeSolicitante, idPaciente, prioridadNum);
+      await postTurnoEspera(idEfeSerEsp, idProf, idEfeSolicitante, idPaciente, idsEstudios, prioridadNum);
 
       // éxito: mostrar alerta
       setAlertMsg("Turno en espera creado correctamente.");
@@ -204,6 +212,8 @@ export default function AddEspera(): JSX.Element {
   const pacienteStyle = { bgcolor: "info.light", color: "info.contrastText" }; // cian distinto
   const profesionalStyle = { bgcolor: "#8b5cf6", color: "common.white" }; // violeta personalizado
   const especialidadStyle = { bgcolor: "#cf7302ff", color: "common.white" }; // naranja con texto blanco
+  // NUEVO: color exclusivo para estudios (no usado anteriormente)
+  const estudioStyle = { bgcolor: "secondary.light", color: "secondary.contrastText" };
 
   return (
     <Box sx={{ p: 3, maxWidth: 900, mx: "auto", position: "relative" }}>
@@ -337,7 +347,7 @@ export default function AddEspera(): JSX.Element {
       )}
 
       {/* -- NUEVO: Mostrar selector de Estudios Requeridos justo después de elegir EfeSerEsp y antes de prioridad -- */}
-      {  !finishEstudioRequerido && (
+      { finishEfeSerEsp && !finishEstudioRequerido && (
         <Box sx={{ mb: 2 }}>
           <LookEstudioRequerido
             estudioRequerido={estudioRequerido}
@@ -345,6 +355,37 @@ export default function AddEspera(): JSX.Element {
             setFinishEstudioRequerido={setFinishEstudioRequerido}
           />
         </Box>
+      )}
+
+      {/* -- NUEVO: Tarjeta que muestra los estudios seleccionados (igual estilo que paciente/profesional) -- */}
+      {finishEstudioRequerido && (
+        <Paper elevation={2} sx={{ p: 2, mb: 2, position: "relative", ...estudioStyle }}>
+          <IconButton
+            size="small"
+            onClick={resetEstudioRequerido}
+            sx={{ position: "absolute", top: 8, right: 8 }}
+            aria-label="Eliminar estudios"
+          >
+            <CloseIcon />
+          </IconButton>
+
+          <Typography variant="h6">Estudios requeridos</Typography>
+
+          {estudioRequerido.length > 0 ? (
+            <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: "wrap" }}>
+              {estudioRequerido.map((e) => (
+                <Chip
+                  key={e.id}
+                  label={e.nombre ?? `#${e.id}`}
+                  size="small"
+                  sx={{ mb: 0.5 }}
+                />
+              ))}
+            </Stack>
+          ) : (
+            <Typography sx={{ mt: 1 }}>(ninguno)</Typography>
+          )}
+        </Paper>
       )}
 
       <Divider sx={{ my: 2 }} />

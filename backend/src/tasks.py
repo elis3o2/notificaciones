@@ -70,13 +70,64 @@ def make_query(size):
     """
 
 
+def make_query2(size):
+    if size == 1:
+        where_clause = "WHERE th.idturasghistorico = ?"
+    else:
+        placeholders = ",".join(["?"] * size)
+        where_clause = f"WHERE th.idturasghistorico IN ({placeholders})"
+
+    return f""""
+    SELECT
+        efe.idefector as idefector,
+        ser.ser as cod_ser_dtt,
+        trim(prf.nom) as prof,
+        trim(ser.nom) as servicio,
+        tdoc.abrev_doc as tipoDoc,
+        per.nro_doc as nroDoc,
+        trim(per.apellido) as apePac,
+        trim(per.nombre_per) as nomPac,
+        extend(th.fechahora_turno, year to day) as fechaTurno,
+        extend(th.fechahora_turno, hour to minute) as horaTurno,
+        efe.nombre as efector,
+        trim(efe.nomcalle) as calleEfe,
+        efe.numero as alturaCalleEfe,
+        efe.letracalle as letraCalleEfe,
+        efe.coordenadax as coordXEfe,
+        efe.coordenaday as coordYEfe,
+        efe.telefono as telEfe,
+        trim(per.carac_telef) as caracTelPacV_personas,
+        cast(per.nro_telef as varchar(20)) as telPacV_personas
+    FROM turnosdtt_historico th
+    JOIN hcsindividuales h
+    ON h.nrohci = rpad(trim(th.hc_paciente),10,' ')
+    JOIN pacientes pac
+    ON pac.idhistind = h.idhistind
+    JOIN v_personas per
+    ON per.id_persona = pac.idpaciente
+    JOIN v_tipo_doc tdoc
+    ON tdoc.cod_doc = per.cod_doc
+    JOIN hos:turasg tur
+    ON tur.prf = th.cod_prf
+    AND tur.fec = th.fechahora_turno
+    JOIN hos:turcns cns
+    ON cns.cns = tur.cns
+    JOIN efectores efe
+    ON efe.codigo = cns.efe
+    JOIN hos:cliser ser
+    ON ser.ser = tur.ser
+    JOIN hos:cliprf prf
+    ON prf.prf = th.cod_prf
+    {where_clause}
+    """
+
 def query_persona():
     return """
     SELECT 
         TRIM(per.apellido) AS apePac,
         TRIM(per.nombre_per) AS nomPac,
         TRIM(per.carac_telef) AS caracTelPacV_personas,
-        CAST(per.nro_telef AS VARCHAR(7)) AS telPacV_personas
+        CAST(per.nro_telef AS VARCHAR(13)) AS telPacV_personas
     FROM v_personas per
     WHERE per.id_persona = ?
     """
@@ -148,9 +199,6 @@ def parse_time(value):
             continue
     return None
 
-
-
-from django.db import IntegrityError
 
 @shared_task
 def verificar_turnos():
@@ -263,7 +311,6 @@ def verificar_turnos():
                             print(f"[ERROR] al crear Turno id={idturno}: {ex}")
                             continue
 
-                # Para estados 1,2 o 3: actualizar estado y eventualmente enviar mensaje
                 if estado in (2, 3, 4):
                     try:
                         filas_actualizadas = Turno.objects.filter(id=idturno).update(id_estado_id=estado)
@@ -707,3 +754,290 @@ def send_reminder_task(detalles):
 
     except Exception as e:
         print(f"[ERROR general en send_reminder_task para id_turno={id_turno}]: {e}")
+
+@shared_task
+def verificar_turnos2():
+    print(f"[{timezone.now()}] Ejecutando verificación de turnos...")
+    tz = pytz.timezone(settings.TIME_ZONE)
+    # Obtener/crear LastMod (mantener aware si USE_TZ)
+    try:
+        last_mod_obj = LastMod.objects.first()
+        if not last_mod_obj:
+            lm0 = datetime(1970, 1, 1, 0, 0, 0)
+            if settings.USE_TZ:
+                lm0 = timezone.make_aware(lm0, timezone.get_default_timezone())
+            last_mod_obj = LastMod.objects.create(fecha=lm0)
+        last_mod_raw = last_mod_obj.fecha
+    except Exception as e:
+        print(f"[ERROR] al obtener/crear LastMod: {e}")
+        return
+
+    try:
+        conn = connections['informix']
+        with conn.cursor() as cur:
+            lm_param = last_mod_raw.strftime("%Y-%m-%d %H:%M:%S")
+            print(f"[DEBUG] Usando last_mod para consulta Informix: {lm_param!r}")
+
+            try:
+                cur.execute("""
+                    SELECT idturasighistorico, idestadoturno, fecha_hora_mdf
+                    FROM turnosdtt_historico
+                    WHERE fecha_hora_mdf > ?
+                    ORDER BY fecha_hora_mdf
+                """, [lm_param])
+            except Exception as ex:
+                print(f"[ERROR] al ejecutar consulta de notificaciones con param {lm_param!r}: {ex}")
+                return
+
+            mejor_raw = None
+
+            for r in cur.fetchall():
+                print(f"[DEBUG] notificacion raw: {r}")
+                idturno, idestadoturno,  last_modf_val = r
+
+                este_raw = str(last_modf_val).split(".")[0]
+                if mejor_raw is None or este_raw > mejor_raw:
+                    mejor_raw = este_raw
+
+                # Mapeo de idestadoturno -> estado (restaurado al mapping esperado)
+                if idestadoturno == 3:
+                    estado = 1
+                elif idestadoturno in (4, 5, 6):
+                    estado = 4
+                elif idestadoturno in (1, 2, 7):
+                    estado = 2
+                elif idestadoturno == 8:
+                    estado = 3
+                else:
+                    continue
+
+                # Si corresponde (0 o 3) traigo detalles completos
+                detalles = None
+                if estado in (1, 3):
+                    try:
+                        cur.execute(make_query2(1), [idturno])
+                        detalles = cur.fetchone()
+                    except Exception as ex:
+                        print(f"[ERROR] al ejecutar make_query() para idturno={idturno}: {ex}")
+                        continue
+
+                    if not detalles:
+                        print(f"[DEBUG] No hay detalles para idturno={idturno}")
+                        continue
+
+                    (
+                        _id_from_row, id_efector, cod_ser_dtt, id_efe_ser_esp ,
+                        tipo_doc, nro_doc, ape_pac, nom_pac, fecha_turno, hora_turno,
+                        ape_prof, nom_prof, nombre_servicio, nombre_especialidad,
+                        nombre_efector, calle, altura, letra, coordx, coordy,
+                        tel_efe, calle_nom, carac_tel, tel
+                    ) = detalles
+                    # parsear
+                    d_fecha = parse_date(fecha_turno)
+                    d_hora = parse_time(hora_turno)
+
+                    d_fecha = d_fecha.strftime("%d-%m-%Y")
+                    d_hora = d_hora.strftime("%H:%M")
+
+                    # formatear al formato pedido: '%d-%m-%Y' y '%H:%M'
+                    fecha_literal = str(fecha_turno).split(" ")[0]
+
+                    s_h = str(hora_turno).split(".")[0] 
+                    if " " in s_h:
+                        hora_literal = s_h.split(" ", 1)[1] 
+                    else:
+                        hora_literal = s_h
+
+                    if estado == 1:
+                        try:
+                            Turno.objects.create(
+                                id=idturno,
+                                id_estado_id=estado,
+                                msj_confirmado=0,
+                                msj_reprogramado=0,
+                                msj_cancelado=0,
+                                msj_recordatorio=0,
+                                id_efe_ser_esp_id=id_efe_ser_esp,
+                                fecha=fecha_literal,
+                                hora=hora_literal
+                            )
+                            print(f"[INFO] Creado Turno id={idturno} fecha={fecha_literal} hora={hora_literal}")
+                        except Exception as ex:
+                            print(f"[ERROR] al crear Turno id={idturno}: {ex}")
+                            continue
+
+                if estado in (2, 3, 4):
+                    try:
+                        filas_actualizadas = Turno.objects.filter(id=idturno).update(id_estado_id=estado)
+                        if filas_actualizadas == 0:
+                            print(f"[DEBUG] No existe Turno local con id={idturno} => se ignora notificación (estado={estado})")
+                            continue
+
+                        print(f"[INFO] Actualizado Turno id={idturno} a estado={estado} (filas_actualizadas={filas_actualizadas})")
+                    except Exception as ex:
+                        print(f"[ERROR] al actualizar Turno id={idturno}: {ex}")
+                        continue
+
+                    # Si estado == 2 (suspendido) traer persona + efector + enviar
+                    if estado == 2:
+                        try:
+                            # obtener datos persona de forma segura
+                            cur.execute(query_persona(), [idpaciente])
+                            persona_row = cur.fetchone()
+                            if persona_row:
+                                ape_pac, nom_pac, carac_tel, tel = persona_row
+                            else:
+                                ape_pac = nom_pac = carac_tel = tel = None
+
+                            # --- cambio mínimo: obtener id_efe_ser_esp desde Turno si no lo tenemos
+                            id_efe_ser_esp = Turno.objects.filter(id=idturno).values_list("id_efe_ser_esp_id", flat=True).first()
+
+                            # obtener EfeSerEsp para sacar efector/servicio/especialidad (asumimos que existe)
+                            ese_obj = EfeSerEsp.objects.select_related(
+                                "id_efector", "id_servicio", "id_especialidad"
+                            ).get(pk=id_efe_ser_esp)
+
+                            id_efector = ese_obj.id_efector_id
+                            id_servicio = ese_obj.id_servicio_id
+                            id_especialidad = ese_obj.id_especialidad_id
+
+                            nombre_servicio = ese_obj.id_servicio.nombre if hasattr(ese_obj, "id_servicio") and ese_obj.id_servicio else None
+                            nombre_especialidad = ese_obj.id_especialidad.nombre if hasattr(ese_obj, "id_especialidad") and ese_obj.id_especialidad else None
+
+                            # datos del efector vía cursor Informix
+                            nombre_efector = calle = altura = letra = coordx = coordy = tel_efe = calle_nom = None
+                            if id_efector:
+                                cur.execute(query_efector(), [id_efector])
+                                ef_row = cur.fetchone()
+                                if ef_row:
+                                    (nombre_efector, calle, altura, letra,
+                                    coordx, coordy, tel_efe, calle_nom) = ef_row
+
+                            # obtener fecha/hora guardadas en Turno (siempre strings según create)
+                            fecha_literal = Turno.objects.filter(id=idturno).values_list("fecha", flat=True).first()
+                            hora_literal = Turno.objects.filter(id=idturno).values_list("hora", flat=True).first()
+
+                            # intentar parsear sin hacer chequeos extra (cambio mínimo)
+                            try:
+                                d_fecha = parse_date(fecha_literal).strftime("%d-%m-%Y")
+                            except Exception:
+                                d_fecha = fecha_literal
+                            try:
+                                d_hora = parse_time(hora_literal).strftime("%H:%M")
+                            except Exception:
+                                d_hora = hora_literal
+
+                            nom_prof = None
+                            ape_prof = None
+                        except Exception as ex:
+                            print(f"[ERROR] al procesar estado 2 para idturno={idturno}: {ex}")
+                            continue
+
+                if estado == 4:
+                    continue
+
+                # Asegurar que id_efe_ser_esp esté definido antes de check_turno:
+                if "id_efe_ser_esp" not in locals() or id_efe_ser_esp is None:
+                    id_efe_ser_esp = Turno.objects.filter(id=idturno).values_list("id_efe_ser_esp_id", flat=True).first()
+
+                telefono = None
+                send, plantilla = check_turno(id_efe_ser_esp, estado)
+                if send and plantilla:
+                    if carac_tel and tel:
+                        telefono = ("549" + str(carac_tel) + str(tel)).replace(" ", "")
+
+                        datos_plantilla = {
+                            "nompac": nom_pac or "",
+                            "apepac": ape_pac or "",
+                            "fecha": d_fecha,
+                            "horaturno": d_hora,
+                            "nomprof": nom_prof or "",
+                            "apeprof": ape_prof or "",
+                            "especialidad": nombre_especialidad or "",
+                            "efector": nombre_efector or "",
+                            "servicio": nombre_servicio or "",
+                            "calle": calle or "",
+                            "altura": altura or "",
+                            "letra": letra or "",
+                            "coordx": coordx or "",
+                            "coordy": coordy or "",
+                            "tel_efe": tel_efe or "",
+                            "calle_nom": calle_nom or "",
+                        }
+
+                        mensaje = format_plantilla(plantilla.contenido, datos_plantilla)
+                        res = enviar_whatsapp(telefono, mensaje)
+                        response_data = getattr(res, "data", {}) or {}
+
+                        if res.status_code == 503:
+                            ack = -4
+                        elif res.status_code == 400:
+                            ack = -3
+                        elif res.status_code == 404:
+                            ack = -2
+                        elif res.status_code == 500:
+                            ack = -1
+                        else:
+                            ack = response_data.get("ack")
+
+                        try:
+                            Mensaje.objects.create(
+                                id_mensaje=response_data.get("id", None),
+                                id_turno_id=idturno,
+                                numero=telefono,
+                                id_plantilla=plantilla,
+                                fecha_envio=datetime.now(),
+                                id_estado_id=ack,
+                            )
+                        except Exception as ex:
+                            print(f"[ERROR] al crear Mensaje para turno {idturno}: {ex}")
+                            continue
+
+                        if ack >= 0:  # actualizar flags en Turno
+                            try:
+                                if estado == 1:
+                                    Turno.objects.filter(id=idturno).update(msj_confirmado=1)
+                                elif estado == 2:
+                                    Turno.objects.filter(id=idturno).update(msj_cancelado=1)
+                                elif estado == 3:
+                                    Turno.objects.filter(id=idturno).update(msj_reprogramado=1)
+                            except Exception as ex:
+                                print(f"[ERROR] al actualizar flags msj_* en Turno id={idturno}: {ex}")
+                    else:
+                        print(f"[DEBUG] No hay teléfono válido para idturno={idturno} (carac_tel={carac_tel}, tel={tel})")
+                        try:
+                            Mensaje.objects.create(
+                                id_turno_id=idturno,
+                                id_plantilla=plantilla,
+                                numero=telefono,
+                                fecha_envio=datetime.now(),
+                                id_estado_id=-3,
+                            )
+                        except Exception as ex:
+                            print(f"[ERROR] al crear Mensaje para turno {idturno}: {ex}")
+                else:
+                    print(f"[DEBUG] check_turno returned send={send}, plantilla={plantilla} for turno {idturno}")
+
+            # Al final: actualizar LastMod con mejor_raw EXACTO (SQL directo en default_connection)
+            try:
+                if mejor_raw is None:
+                    print("[DEBUG] No se encontró mejor_raw -> no se actualiza LastMod")
+                else:
+                    table_name = LastMod._meta.db_table
+                    pk_col = LastMod._meta.pk.column
+                    with default_connection.cursor() as cur2:
+                        cur2.execute(
+                            f"UPDATE {table_name} SET fecha = %s WHERE {pk_col} = %s",
+                            [mejor_raw, last_mod_obj.pk]
+                        )
+                    print(f"[DEBUG] Actualizado LastMod.fecha EXACTO = {mejor_raw!r} (UPDATE directo)")
+            except Exception as ex:
+                print(f"[ERROR] al actualizar LastMod con SQL directo: {ex}")
+
+    except Exception as e:
+        print(f"[ERROR] Error en verificación de turnos: {e}")
+
+
+
+
+

@@ -337,7 +337,7 @@ export default function TurnosPage() {
       default: return <TableCell key={columnKey} sx={{ padding: cellPadding }}>—</TableCell>;
     }
   }
-  console.log(turnos)
+  (turnos)
   return (
     <Box sx={{ p: 2 }}>
       {/* header */}

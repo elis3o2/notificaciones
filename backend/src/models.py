@@ -159,10 +159,11 @@ class TurnoEspera(models.Model):
         null=True,
         blank=True
     )
-    estudios_requeridos = models.ManyToManyField(
+    estudio_requerido = models.ManyToManyField(
         'EstudioRequerido',
         through='TurnoEsperaEstudio',
     )
+    diagnostico = models.CharField(max_length=256,null=True,blank=True)
 
 
     class Meta:
@@ -205,7 +206,7 @@ class EstudioRequerido(models.Model):
         
 
 class TurnoEsperaEstudio(models.Model):
-    id = models.IntegerField(primary_key=True)
+    id = models.AutoField(primary_key=True)
     id_turno_espera = models.ForeignKey(
         TurnoEspera,  models.DO_NOTHING, db_column='id_turno_espera')
     id_estudio_requerido = models.ForeignKey(

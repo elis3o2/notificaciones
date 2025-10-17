@@ -42,7 +42,6 @@ type Props = {
   setAlertSeverity: Setter<AlertSeverity>;
 };
 
-const CARD_BORDER_RADIUS_PX = 8; // mantengo consistente para los botones finales
 
 const Especialidades = ({
   open,
@@ -76,9 +75,7 @@ const Especialidades = ({
 
     setEfecServEspecialidades(prev => {
       const prevEf = prev[efId] || {};
-      console.log("PREV",prev)
       const prevArr = prevEf[servId] || especialidades.filter(e => e .id_efector === efId &&  e.id_servicio === servId);
-      console.log("PREVARR", prevArr)
       const newArr = prevArr.map(e => (e.id === esp.id ? ({ ...e, [field]: value } as EfeSerEspPlantillaExtend) : e));
 
       return {
@@ -98,7 +95,6 @@ const Especialidades = ({
 
   const handleOnSuccess = (esp: EfeSerEspPlantillaExtend, field: FieldName, value: 0 | 1) => {
     // Confirmacion llamará a esto por cada entrada afectada
-    console.log("ESPPPP", esp);
     updateCache(esp, field, value);
     updateEspecialidades(esp, field, value);
   };
@@ -123,7 +119,6 @@ const Especialidades = ({
     setConfirmEspecialidades([]);
     setOpen(false);
   };
-
   return (
     <>
       <Confirmacion

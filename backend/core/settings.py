@@ -27,7 +27,7 @@ TIME_ZONE = "America/Argentina/Buenos_Aires"
 CELERY_TIMEZONE = "America/Argentina/Buenos_Aires"
 
 DEBUG = True
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost', cast=Csv())
+ALLOWED_HOSTS = ["*"]
 CORS_ALLOW_ALL_ORIGINS = True
 
 INSTALLED_APPS = [
@@ -86,7 +86,7 @@ DATABASES = {
         'PORT': config('DB_PORT')
     },
     'informix': {
-        'ENGINE': 'core.informix_jdbc_backend',  # <- ruta completa al paquete
+        'ENGINE': 'core.informix_jdbc_backend', 
         'NAME': config('DB_NAME_INFORMIX'),
         'USER': config('DB_USER_INFORMIX'),
         'PASSWORD': config('DB_PASSWORD_INFORMIX'),

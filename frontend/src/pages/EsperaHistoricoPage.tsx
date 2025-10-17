@@ -81,7 +81,6 @@ const downloadCSV = (rows: TurnoEspera[], visibleKeys: string[], columnsMap: Rec
 };
 
 const estadoColor = (estado: string) => {
-  console.log(estado)
   const e = estado.trim().toUpperCase();
   switch (e) {
     case 'ESPERA': return 'warning';
@@ -112,7 +111,6 @@ export default function TurnosEsperaDashboard(): JSX.Element {
 
   const [sortDesc, setSortDesc] = useState<boolean>(true);
   const toggleSort = () => setSortDesc(prev => !prev);
-  console.log(rows)
   useEffect(() => {
     // cuando el componente hijo marca finishPaciente = true, lanzamos la búsqueda automática
     if (finishPaciente && paciente?.id) {

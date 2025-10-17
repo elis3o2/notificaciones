@@ -171,13 +171,19 @@ class EfeSerEspViewSet(viewsets.ModelViewSet):
         # Filtramos por efector
         queryset = self.get_queryset().filter(id_efector=id_efector)
 
-        # Armamos la lista [{id: X, nombre: Y}, ...]
+        # Obtenemos servicios únicos, ordenados por nombre
         servicios = [
             {"id": item["id_servicio"], "nombre": item["id_servicio__nombre"]}
-            for item in queryset.values("id_servicio", "id_servicio__nombre").distinct()
+            for item in (
+                queryset
+                .values("id_servicio", "id_servicio__nombre")
+                .order_by("id_servicio__nombre")  # <-- orden alfabético por nombre
+                .distinct()
+            )
         ]
 
         return Response(servicios)
+
 
 
     @action(detail=False, methods=["get"], url_path="efectores")
@@ -257,19 +263,28 @@ class EfeSerEspPlantillaViewSet(viewsets.ModelViewSet):
         id_servicio = request.query_params.get("id_servicio")
 
         queryset = self.get_queryset()
+
+        # Filtros opcionales
         if id_efector:
             queryset = queryset.filter(id_efe_ser_esp__id_efector=id_efector)
         if id_servicio:
             queryset = queryset.filter(id_efe_ser_esp__id_servicio=id_servicio)
 
-        queryset = queryset.select_related(
-            "id_efe_ser_esp",
-            "plantilla_conf",
-            "plantilla_repr",
-            "plantilla_canc",
-            "plantilla_reco",
-        ).order_by("id_efe_ser_esp__id_especialidad__nombre")
+        # Optimización de consultas y ordenamiento
+        queryset = (
+            queryset.select_related(
+                "id_efe_ser_esp",
+                "plantilla_conf",
+                "plantilla_repr",
+                "plantilla_canc",
+                "plantilla_reco",
+            )
+            .order_by(
+                "id_efe_ser_esp__id_especialidad__nombre",
+            )
+        )
 
+        # Serialización y respuesta ordenada
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
 

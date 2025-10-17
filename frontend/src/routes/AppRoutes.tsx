@@ -5,13 +5,12 @@ import Layout from '../common/layouts/Layout';
 import InitPage from '../pages/IncioPage';
 import ListaPage from '../pages/EfectoresPage';
 import Plantilla from '../pages/PlantillasPage';
-import AddPlantillaPage from '../pages/AddPlantillaPage';
 import TurnosPage from '../pages/TurnoPage';
 import HistoricoPage from '../pages/HistoricoPage';
 import ListaEspera from '../pages/ListaEsperaPage';
 import AddEspera from '../pages/AddEsperaPage';
 import TurnosEsperaDashboard from '../pages/EsperaHistoricoPage';
-import LookEstudioRequerido from '../features/turno/components/LookEstudioRequerido';
+
 const AppRoutes = () => {
   return (
     <Routes>
@@ -30,13 +29,11 @@ const AppRoutes = () => {
         <Route path="/list" element={<ListaPage />} />
         <Route path="/plantillas" element={<Plantilla />} /> 
         <Route path="/plantillas/:tipo" element={<Plantilla />} />
-        <Route path="/plantillas/nueva/:tipo" element={<AddPlantillaPage />}/> 
         <Route path="/turnos" element={<TurnosPage />}/>
         <Route path="/historico" element={<HistoricoPage />}/>
         <Route path="/espera" element={<ListaEspera />}/>
         <Route path="/add-espera" element={<AddEspera />}/>
         <Route path="/espera-paciente" element={<TurnosEsperaDashboard />}/>
-        <Route path='/requerido'  element={<LookEstudioRequerido />}/>
         <Route path='*' element={<Navigate to="/home" replace />} />
       </Route>
     </Routes>
