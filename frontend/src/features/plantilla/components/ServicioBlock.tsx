@@ -1,11 +1,10 @@
-import type { Servicio, Efector, Especialidad } from "../../efe_ser_esp/types";
+import type { Servicio, Efector } from "../../efe_ser_esp/types";
 import type { EfeSerEspPlantillaExtend } from "../types";
-import type { EfeSerEspPlantilla } from "../types";
 import { getPlantillaByEfectorServicio } from "../api";
 import {
   Box,
   Typography,
-  Grid,
+  GridLegacy as Grid,
   Card,
   CardContent,
   Collapse,
@@ -48,7 +47,6 @@ const Servicios = ({
   efecServEspecialidades,
   setEfecServEspecialidades,
   servicioEfectorActual,
-  setServicioEfectorActual,
   confirmField,
   setConfirmField,
   confirmValue,
@@ -254,11 +252,9 @@ const Servicios = ({
               <SendAll
                 open={open}
                 setOpen={setOpen}
-                efectorSeleccionado={efectorSeleccionado}
                 preFunction={allEspecialidadesToChange}
                 setEspecialidades={setEspecialidades}
                 // paso ambos nombres para compatibilidad con distintos hijos
-                setEfecServEspecialidades={setEfecServEspecialidades}
                 setEfectorEspecialidades={setEfecServEspecialidades}
                 confirmField={confirmField}
                 setConfirmField={setConfirmField}
@@ -275,7 +271,7 @@ const Servicios = ({
 
           <Grid container spacing={2} sx={{ mt: 2 }}>
             {servicios.map((serv) => (
-              <Grid item xs={12} sm={6} md={4} key={serv.id}>
+              <Grid xs={12} sm={6} md={4} key={serv.id}>
                 <Card
                   sx={{
                     p: 2,

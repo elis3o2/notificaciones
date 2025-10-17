@@ -18,8 +18,8 @@ import {
 } from "@mui/material"
 import { useNavigate } from 'react-router-dom'
 import { getTurnosCount } from '../features/turno/api'
-import { getEfectoresAll, getServiciosAll, getEspecialidadesAll, getEfeSerEspAll} from '../features/efe_ser_esp/api'
-import type { Efector, Especialidad, Servicio } from '../features/efe_ser_esp/types'
+import {  getServiciosAll, getEspecialidadesAll, getEfeSerEspAll} from '../features/efe_ser_esp/api'
+import type {  Especialidad, Servicio } from '../features/efe_ser_esp/types'
 import type { EfeSerEsp } from '../features/efe_ser_esp/types'
 import HospitalIcon from '../assets/hospital.png'
 import AidKitIcon from '../assets/first-aid-kit.png'

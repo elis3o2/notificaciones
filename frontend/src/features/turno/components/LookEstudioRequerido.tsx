@@ -79,7 +79,7 @@ export default function LookEstudioRequerido({
 
   // filtro simple
   const filtered = estudios.filter((e) =>
-    [e.nombre, e.descripcion, e.id?.toString()]
+    [e.nombre,  e.id?.toString()]
       .join(" ")
       .toLowerCase()
       .includes(query.toLowerCase())

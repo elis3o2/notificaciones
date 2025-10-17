@@ -1,5 +1,5 @@
-import React, { useContext, useEffect, useMemo, useState } from "react";
-import type { Efector, Especialidad } from "../features/efe_ser_esp/types";
+import  { useContext, useEffect, useMemo, useState } from "react";
+import type { Efector } from "../features/efe_ser_esp/types";
 import type { TurnoEspera } from "../features/turno/types";
 import { AuthContext } from "../common/contex";
 import { getTurnoEsperaAbierto } from "../features/turno/api";
@@ -16,8 +16,8 @@ import {
   Paper,
   Stack,
   Button,
-  Grid,
-  Tooltip,
+  GridLegacy as Grid,
+    Tooltip,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -580,7 +580,7 @@ const telefonoEstado = (carac: string | null, nro: string | null) => {
                 color="error"
                 onClick={handleRemove}
                 disabled={isRemoving(activeTurno?.id)}
-                startIcon={isRemoving(activeTurno?.id) ? <CircularProgress size={16} /> : undefined}
+                startIcon={isRemoving(activeTurno?.id) ? <CircularProgress size={16} /> : null}
               >
                 Sacar de la lista de espera
               </Button>

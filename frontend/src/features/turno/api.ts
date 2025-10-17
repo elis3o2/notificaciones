@@ -1,5 +1,5 @@
 import http from '../../common/api/client'
-import type { Turno, TurnoEspera, TurnoExtend, EstadoMsj, EstadoTurno, EstudioRequerido } from './types';
+import type { Turno, TurnoEspera, TurnoExtend, EstadoMsj, EstudioRequerido } from './types';
 
 export const getTurnosAll = (
   id_servicio?: number,

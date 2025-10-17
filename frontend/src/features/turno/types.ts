@@ -4,7 +4,7 @@ import type { Paciente, Profesional, User } from "../persona/types";
 export interface Turno {
     id: number;
     id_estado: EstadoMsj;
-    fecha: Date;
+    fecha: string | null;
     hora: string;
     msj_confirmado: number;
     msj_reprogramado: number;
@@ -46,7 +46,8 @@ export interface EstadoMsj {
 export interface TurnoExtend {
     id: number;
     estado: EstadoTurno;
-    fecha: Date;
+    fecha: string;
+    hora: string;
     msj_confirmado: number;
     msj_reprogramado: number;
     msj_cancelado: number;
@@ -57,7 +58,7 @@ export interface TurnoExtend {
     paciente_dni: string | null;
     profesional_nombre: string | null;
     profesional_apellido: string | null;
-    mensaje_asociado: any[] | null;
+    mensaje_asociado: any[] | undefined;
 }
 
 export interface EstudioRequerido {

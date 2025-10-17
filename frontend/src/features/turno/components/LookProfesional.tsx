@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import  { useState } from "react";
 import {
   Box,
   TextField,
@@ -23,7 +23,8 @@ interface Props {
   efectorId: number;
   selectedProfesional: Profesional | null;
   setProfesional: (p: Profesional | null) => void;
-  setFinishProfesional: useState<boolean>
+  setFinishProfesional: React.Dispatch<React.SetStateAction<boolean>>;
+
 }
 
 export default function LookProfesional({

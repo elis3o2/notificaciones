@@ -39,14 +39,14 @@ export default function LookEfeSerEsp({ setEfeSerEspSeleccionado, setFinishEfeSe
 
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false); // para la llamada de confirm
-  const [loadingServicios, setLoadingServicios] = useState(false);
+//  const [loadingServicios, setLoadingServicios] = useState(false);
 
   useEffect(() => {
-    setLoadingServicios(true);
+   // setLoadingServicios(true);
     getServiciosAll()
       .then(setServicios)
       .catch(() => setError("Error al cargar servicios"))
-      .finally(() => setLoadingServicios(false));
+      //.finally(() => setLoadingServicios(false));
   }, []);
 
   useEffect(() => {

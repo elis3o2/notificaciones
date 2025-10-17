@@ -1,6 +1,6 @@
 // Especialidades.tsx
 import React from "react";
-import type { Servicio, Efector, Especialidad} from "../../efe_ser_esp/types";
+import type { Efector} from "../../efe_ser_esp/types";
 import type { EfeSerEspPlantillaExtend } from "../types";
 import {
   Box,
@@ -28,7 +28,6 @@ type Props = {
   especialidades: EfeSerEspPlantillaExtend[]; // lista plana: cada entrada ya contiene id_efector, id_servicio, id_especialidad
   setEspecialidades: Setter<EfeSerEspPlantillaExtend[]>;
   efectorSeleccionado: Efector[]; // lista de efectores seleccionados
-  servicioSeleccionado: Servicio[]; // lista de servicios seleccionados
   confirmEspecialidades: EfeSerEspPlantillaExtend[];
   setConfirmEspecialidades: Setter<EfeSerEspPlantillaExtend[]>;
   confirmField: FieldName;
@@ -49,7 +48,6 @@ const Especialidades = ({
   especialidades,
   setEspecialidades,
   efectorSeleccionado,
-  servicioSeleccionado,
   confirmEspecialidades,
   setConfirmEspecialidades,
   confirmField,
@@ -148,7 +146,6 @@ const Especialidades = ({
                 <SendAll
                   open={open}
                   setOpen={setOpen}
-                  efectorSeleccionado={efectorSeleccionado}
                   preFunction={allEspecialidadesToChange}
                   setEspecialidades={setEspecialidades}
                   setEfectorEspecialidades={setEfecServEspecialidades}

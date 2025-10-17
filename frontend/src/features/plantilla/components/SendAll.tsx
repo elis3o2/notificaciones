@@ -1,6 +1,5 @@
 // SendAll.tsx (reemplazar)
-import React, { useState } from "react";
-import type { Efector, Servicio } from "../../efe_ser_esp/types";
+import  { useState } from "react";
 import type { EfeSerEspPlantillaExtend } from "../types";
 import {
   Stack,
@@ -19,7 +18,6 @@ type FieldName = "confirmacion" | "reprogramacion" | "cancelacion" | "recordator
 type Props = {
   open: boolean;
   setOpen: Setter<boolean>;
-  efectorSeleccionado: Efector[]; // ahora lista
   preFunction: () => Promise<EfeSerEspPlantillaExtend[]> | EfeSerEspPlantillaExtend[];
   setEspecialidades: Setter<EfeSerEspPlantillaExtend[]>;
   setEfectorEspecialidades: Setter<Record<number, Record<number, EfeSerEspPlantillaExtend[]>>>;
@@ -37,7 +35,6 @@ type Props = {
 const SendAll = ({
   open,
   setOpen,
-  efectorSeleccionado,
   preFunction,
   setEspecialidades,
   setEfectorEspecialidades,

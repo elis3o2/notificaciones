@@ -21,7 +21,7 @@ import { getPacienteByDNI } from "../../persona/api";
 interface LookPacienteProps {
   paciente: Paciente | null;
   setPaciente: (p: Paciente | null) => void;
-  setFinishPaciente: useState<boolean>;
+  setFinishPaciente: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 function LookPaciente({ paciente, setPaciente,  setFinishPaciente }: LookPacienteProps) {

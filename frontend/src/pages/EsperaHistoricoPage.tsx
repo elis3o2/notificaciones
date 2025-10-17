@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo , useEffect } from 'react';
 import {
   Box, Button, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   Typography, CircularProgress, Tooltip, IconButton, Popover, FormGroup, FormControlLabel, Checkbox, Skeleton, Chip
@@ -221,8 +221,8 @@ export default function TurnosEsperaDashboard(): JSX.Element {
               <Box>
                 <Typography variant="subtitle2">Paciente seleccionado</Typography>
                 <Box display="flex" alignItems="center" gap={1} mt={1}>
-                  <Chip label={`${paciente.apellido ?? ''}, ${paciente.nombre ?? ''}`} />
-                  <Typography variant="body2" color="text.secondary">DNI: {paciente.nro_doc ?? '—'}</Typography>
+                  <Chip label={`${paciente?.apellido ?? ''}, ${paciente?.nombre ?? ''}`} />
+                  <Typography variant="body2" color="text.secondary">DNI: {paciente?.nro_doc ?? '—'}</Typography>
                 </Box>
               </Box>
 

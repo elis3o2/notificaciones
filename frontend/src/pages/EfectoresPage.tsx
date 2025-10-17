@@ -1,9 +1,9 @@
 // src/pages/ListaPage.tsx
 import { AuthContext } from "../common/contex";
 import { useContext, useState } from "react";
-import { Box, Grid, Card, CardContent, Typography, Snackbar, Alert, Button } from "@mui/material";
+import { Box,   GridLegacy as Grid, Card, CardContent, Typography, Snackbar, Alert, Button } from "@mui/material";
 import { useNavigate } from "react-router-dom";
-import type { Efector, Servicio, Especialidad } from "../features/efe_ser_esp/types";
+import type { Efector, Servicio } from "../features/efe_ser_esp/types";
 import { getServicioByEfector } from "../features/efe_ser_esp/api";
 import Servicios from "../features/plantilla/components/ServicioBlock";
 import Especialidades from "../features/plantilla/components/EspecialidadBlock";
@@ -160,7 +160,7 @@ function ListaPage() {
       {/* Grid de Efector */}
       <Grid container spacing={2} sx={{ mt: 2 }}>
         {efectores.map((item: Efector) => (
-          <Grid item xs={12} sm={6} md={4} key={item.id}>
+          <Grid xs={12} sm={6} md={4} key={item.id}>
             <Card
               sx={{
                 p: 2,
@@ -243,7 +243,6 @@ function ListaPage() {
           especialidades={especialidades}
           setEspecialidades={setEspecialidades}
           efectorSeleccionado={efectorSeleccionado}
-          servicioSeleccionado={servicioSeleccionado}
           confirmEspecialidades={confirmEspecialidades}
           setConfirmEspecialidades={setConfirmEspecialidades}
           confirmField={confirmField}

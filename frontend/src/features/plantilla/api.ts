@@ -17,7 +17,7 @@ export const getPlantillaByEfector = (id: number): Promise<EfeSerEspPlantilla[]>
   http.get<EfeSerEspPlantilla[]>(`efe_ser_esp_plantilla/buscar/?id_efector=${id}`).then(res => res.data);
 
 
-export const updateEfectorPlantilla = (id: number, data: EfeSerEspPlantillaExtend): Promise<EfeSerEspPlantillaExtend> =>
+export const updateEfectorPlantilla = (id: number, data: any): Promise<EfeSerEspPlantillaExtend> =>
   http.patch<EfeSerEspPlantillaExtend>(`efe_ser_esp_plantilla/${id}/`, data).then(res => res.data);
 
 export const getPlantillaByEfectorServicio = (id_e: number, id_s: number): Promise<EfeSerEspPlantillaExtend[]> =>
