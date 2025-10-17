@@ -3,6 +3,7 @@
 Backend mínimo "liviano" para Informix via JDBC usando jaydebeapi.
 Evita circular imports y expone lo mínimo que Django espera.
 """
+from decouple import config
 import jpype
 import threading
 import jaydebeapi
@@ -209,8 +210,8 @@ class DatabaseWrapper(BaseDatabaseWrapper):
         - que la JVM se arranque sólo una vez por proceso (uso de lock),
         - que el hilo actual quede adjuntado a la JVM si ésta ya estaba iniciada.
         """
-        informix_jar = "/home/imusaprueba/jdbc-4.50.10.jar"
-        bson_jar = "/home/imusaprueba/bson-4.10.2.jar"
+        informix_jar = config('JDBC_ROUTE')
+        bson_jar = config('BNSON_ROUTE')
         classpath = f"{informix_jar}:{bson_jar}"
 
         jdbc_url = (
