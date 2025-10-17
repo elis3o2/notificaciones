@@ -489,9 +489,9 @@ class HistoricoPaciente(APIView):
                 efe.nombre AS efector, 
                 s.descripcion AS servicio, 
                 esp.descripcion AS especialidad
-            FROM turnos_historico th
+            FROM turnoshistorico th
             JOIN turnos t ON th.idturno = t.idturno
-            JOIN turnos_estado es on es.idestadoturno = th.idestadoturno
+            JOIN turnosestado es on es.idestadoturno = th.idestadoturno
             JOIN personalefector pe ON pe.idpersonalefector = t.idpersonalefector
             JOIN personal p ON p.idpersonal = pe.idpersonal
             JOIN efectores efe ON efe.idefector = pe.idefector
@@ -518,7 +518,7 @@ class HistoricoPaciente(APIView):
                 efe.nombre AS efector, 
                 s.descripcion AS servicio, 
                 esp.descripcion AS especialidad
-            FROM turnos_respaldo_eliminado te
+            FROM turnoselimresp te
             JOIN personalefector pe ON pe.idpersonalefector = te.idpersonalefector
             JOIN personal p ON p.idpersonal = pe.idpersonal
             JOIN efectores efe ON efe.idefector = pe.idefector
@@ -661,7 +661,7 @@ class TurnosMergedAllAPIView(APIView):
                     UNION ALL
                     (SELECT te.idturno, TRIM(per.nombre_per) AS paciente_nombre, TRIM(per.apellido) AS paciente_apellido,
                     per.nro_doc, TRIM(p.nombre) AS nombre_profesional, TRIM(p.apellido) AS apellido_profesional
-                    FROM turnos_respaldo_eliminado te
+                    FROM turnoselimresp te
                     JOIN personalefector pe ON pe.idpersonalefector = te.idpersonalefector
                     JOIN personal p ON p.idpersonal = pe.idpersonal
                     JOIN v_personas per ON per.id_persona = te.idpaciente           

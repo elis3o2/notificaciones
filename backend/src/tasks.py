@@ -226,7 +226,7 @@ def verificar_turnos():
             try:
                 cur.execute("""
                     SELECT idturno, idpaciente, idestadoturno, fecha_hora_mdf
-                    FROM turnos_historico
+                    FROM turnoshistorico
                     WHERE fecha_hora_mdf > ?
                     ORDER BY fecha_hora_mdf
                 """, [lm_param])
