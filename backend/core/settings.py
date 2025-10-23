@@ -8,14 +8,15 @@ pymysql.install_as_MySQLdb()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Static & media
 STATIC_URL = '/static/'
-
-STATIC_ROOT = BASE_DIR / 'staticfiles'
-
+STATIC_ROOT = BASE_DIR.parent / 'staticfiles'               # ej: /home/deploy/notificaciones/staticfiles
 STATICFILES_DIRS = [
-    BASE_DIR.parent / 'frontend' / 'dist',
-    BASE_DIR / 'src' / 'static',
+    BASE_DIR.parent / 'frontend' / 'dist',                  # Vite build
 ]
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR.parent / 'media'
 
 SECRET_KEY = config('DJANGO_SECRET_KEY')
 
