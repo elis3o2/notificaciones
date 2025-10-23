@@ -158,9 +158,10 @@ function ListaPage() {
       </Box>
 
       {/* Grid de Efector */}
+      {/* Grid de Efector */}
       <Grid container spacing={2} sx={{ mt: 2 }}>
         {efectores.map((item: Efector) => (
-          <Grid xs={12} sm={6} md={4} key={item.id}>
+          <Grid item xs="auto" sm="auto" md="auto" key={item.id} sx={{ display: "flex", justifyContent: "center" }}>
             <Card
               sx={{
                 p: 2,
@@ -169,7 +170,7 @@ function ListaPage() {
                 cursor: "pointer",
                 minHeight: 20,
                 maxHeight: 30,
-                minWidth: 150,
+                width: "auto",               // <-- ancho según contenido
                 display: "flex",
                 justifyContent: "center",
                 alignItems: "center",
@@ -207,6 +208,7 @@ function ListaPage() {
           </Grid>
         ))}
       </Grid>
+
 
       {/* Lista de Servicios */}
       {efectorSeleccionado.length > 0 && (

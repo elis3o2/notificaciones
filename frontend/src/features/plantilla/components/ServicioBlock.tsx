@@ -269,9 +269,10 @@ const Servicios = ({
             </Stack>
           </Box>
 
+          {/* Lista de Servicios (ajuste para ancho según contenido) */}
           <Grid container spacing={2} sx={{ mt: 2 }}>
             {servicios.map((serv) => (
-              <Grid xs={12} sm={6} md={4} key={serv.id}>
+              <Grid item xs="auto" sm="auto" md="auto" key={serv.id} sx={{ display: "flex", justifyContent: "center" }}>
                 <Card
                   sx={{
                     p: 2,
@@ -280,7 +281,7 @@ const Servicios = ({
                     cursor: "pointer",
                     minHeight: 20,
                     maxHeight: 30,
-                    minWidth: 150,
+                    width: "auto", // <-- ancho según el contenido
                     display: "flex",
                     justifyContent: "center",
                     alignItems: "center",

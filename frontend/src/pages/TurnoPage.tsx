@@ -415,7 +415,7 @@ export default function TurnosPage() {
             {loading && (
               Array.from({ length: 6 }).map((_, i) => (
                 <TableRow key={`skel-${i}`}>
-                  {allColumns.filter(c => visibleColumns[c.key]).map((col, j) => (
+                  {allColumns.filter(c => visibleColumns[c.key]).map((_, j) => (
                     <TableCell key={j} sx={{ padding: compactView ? '6px 8px' : '12px 16px' }}><Skeleton variant="text" /></TableCell>
                   ))}
                 </TableRow>

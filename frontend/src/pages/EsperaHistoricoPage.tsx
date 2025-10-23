@@ -89,7 +89,7 @@ const estadoColor = (estado: string) => {
 };
 
 // ---------------------- Componente ----------------------
-export default function TurnosEsperaDashboard(): JSX.Element {
+export default function TurnosEsperaDashboard(): React.ReactElement {
   const [paciente, setPaciente] = useState<Paciente | null>(null);
   const [finishPaciente, setFinishPaciente] = useState<boolean>(false);
 
@@ -329,7 +329,7 @@ export default function TurnosEsperaDashboard(): JSX.Element {
             {loading && (
               Array.from({ length: 6 }).map((_, i) => (
                 <TableRow key={`sk-${i}`}>
-                  {ALL_COLUMNS.filter(c => visibleCols[c.key]).map((col, j) => (
+                  {ALL_COLUMNS.filter(c => visibleCols[c.key]).map((_, j) => (
                     <TableCell key={j}><Skeleton variant="text" /></TableCell>
                   ))}
                 </TableRow>
@@ -378,7 +378,6 @@ export default function TurnosEsperaDashboard(): JSX.Element {
                       case 'servicio': return <TableCell key={col.key} sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140, py: 0.5, px: 1 }}>{r.servicio?.nombre ?? '—'}</TableCell>;
                       case 'especialidad': return <TableCell key={col.key} sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140, py: 0.5, px: 1 }}>{r.especialidad?.nombre ?? '—'}</TableCell>;
                       case 'prioridad': return <TableCell key={col.key} sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 80, py: 0.5, px: 1 }}>{r.prioridad ?? '—'}</TableCell>;
-                      default: return <TableCell key={col.key}>—</TableCell>;
                     }
                   })}
                 </TableRow>

@@ -29,7 +29,7 @@ import Alert from "@mui/material/Alert";
 
 type AlertSeverity = "success" | "info" | "warning" | "error";
 
-export default function AddEspera(): JSX.Element {
+export default function AddEspera(): React.ReactElement {
   const location = useLocation();
   const navigate = useNavigate();
 

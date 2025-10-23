@@ -47,7 +47,7 @@ const ALL_COLUMNS = [
 ] as const;
 
 // ---------------------- Helpers ----------------------
-const safeFormat = (iso: Date | null) => {
+const safeFormat = (iso: string | null | undefined) => {
   if (!iso) return '—';
   try {
     return iso.toLocaleString();
@@ -102,7 +102,7 @@ const estadoColor = (estado?: string | null) => {
 };
 
 // ---------------------- Componente ----------------------
-export default function HistoricoPage(): JSX.Element {
+export default function HistoricoPage(): React.ReactElement {
   const [dniInput, setDniInput] = useState<string>('');
   const [dniError, setDniError] = useState<string | null>(null);
 
@@ -330,7 +330,7 @@ export default function HistoricoPage(): JSX.Element {
               // skeletons para mejorar la percepción de carga
               Array.from({ length: 6 }).map((_, i) => (
                 <TableRow key={`sk-${i}`}>
-                  {ALL_COLUMNS.filter(c => visibleCols[c.key]).map((col, j) => (
+                  {ALL_COLUMNS.filter(c => visibleCols[c.key]).map((_, j) => (
                     <TableCell key={j}><Skeleton variant="text" /></TableCell>
                   ))}
                 </TableRow>
@@ -358,7 +358,6 @@ export default function HistoricoPage(): JSX.Element {
                   sx={{ '&:hover': { boxShadow: 3 } }}
                 >
                   {ALL_COLUMNS.filter(c => visibleCols[c.key]).map(col => {
-                    const key = col.key as keyof HistoricoItem;
                     switch (col.key) {
                       case 'fecha_hora_mdf': return <TableCell key={col.key} sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140, py: 0.5, px: 1 }}>{safeFormat(r.fecha_hora_mdf)}</TableCell>;
                       case 'estado':
@@ -386,7 +385,6 @@ export default function HistoricoPage(): JSX.Element {
                       case 'apellido_profesional': return <TableCell key={col.key} sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140, py: 0.5, px: 1 }}>{r.apellido_profesional ?? '—'}</TableCell>;
                       case 'fecha': return <TableCell key={col.key} sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140, py: 0.5, px: 1 }}>{safeFormat(r.fecha)}</TableCell>;
                       case 'hora': return <TableCell key={col.key} sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140, py: 0.5, px: 1 }}>{r.hora ?? '—'}</TableCell>;
-                      default: return <TableCell key={col.key} sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140, py: 0.5, px: 1 }}>{String((r as any)[key] ?? '—')}</TableCell>;
                     }
                   })}
                 </TableRow>

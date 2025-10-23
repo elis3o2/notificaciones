@@ -38,7 +38,7 @@ import { useNavigate } from "react-router-dom";
 type SortBy = "priority" | "dias";
 type AlertSeverity = "success" | "info" | "warning" | "error";
 
-export default function ListaEspera(): JSX.Element {
+export default function ListaEspera(): React.ReactElement {
   const { efectores } = useContext(AuthContext) as { efectores?: Efector[] };
   const [selectedEfector, setSelectedEfector] = useState<Efector | null>(null);
   // `selectedEspecialidad` se maneja por ID para simplificar el Select
@@ -46,7 +46,7 @@ export default function ListaEspera(): JSX.Element {
 
   const [turnos, setTurnos] = useState<TurnoEspera[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [_, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const [sortBy, setSortBy] = useState<SortBy>("priority");
@@ -278,7 +278,7 @@ export default function ListaEspera(): JSX.Element {
   const isRemoving = (id?: number | null) => id != null && removingIds.includes(id);
 
 
-const telefonoEstado = (carac: string | null, nro: string | null) => {
+const telefonoEstado = (carac: string | null | undefined, nro: string | null | undefined) => {
   
   const status: "missing" | "valid" | "invalid" =
     (carac == null || nro == null) ? "missing" :
@@ -381,7 +381,7 @@ const telefonoEstado = (carac: string | null, nro: string | null) => {
               value={selectedEspecialidad ?? ""}
               label="Especialidad"
               onChange={(e) => {
-                const val = e.target.value === "" ? null : Number(e.target.value);
+                const val = e.target.value === null ? null : Number(e.target.value);
                 setSelectedEspecialidad(val);
               }}
             >
