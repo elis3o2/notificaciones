@@ -29,8 +29,8 @@ CELERY_TIMEZONE = "America/Argentina/Buenos_Aires"
 
 DEBUG = False
 ALLOWED_HOSTS =config('ALLOWED_HOSTS', cast=Csv()) #["*"]
-CORS_ALLOW_ALL_ORIGINS = True
-#CORS_ALLOWED_ORIGINS = config('CORS_ORIGIN', cast=Csv())
+#CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOWED_ORIGINS = config('CORS_ORIGIN', cast=Csv())
 INSTALLED_APPS = [
     'src',
     "django.contrib.admin",

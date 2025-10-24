@@ -211,7 +211,7 @@ class DatabaseWrapper(BaseDatabaseWrapper):
         - que el hilo actual quede adjuntado a la JVM si ésta ya estaba iniciada.
         """
         informix_jar = config('JDBC_ROUTE')
-        bson_jar = config('BNSON_ROUTE')
+        bson_jar = config('BSON_ROUTE')
         classpath = f"{informix_jar}:{bson_jar}"
 
         jdbc_url = (
