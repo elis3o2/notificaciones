@@ -1659,9 +1659,9 @@ CREATE TABLE IF NOT EXISTS turno(
 -- Tabla de mensajes enviados
 CREATE TABLE IF NOT EXISTS mensaje (
     id INT AUTO_INCREMENT PRIMARY KEY NOT NULL,
-    id_mensaje VARCHAR(24) NULL,
+    id_mensaje VARCHAR(32) NULL,
     id_turno INT(20) NULL,
-    numero VARCHAR(13) NOT NULL,
+    numero VARCHAR(24) NOT NULL,
     id_plantilla INT NOT NULL,
     fecha_envio DATETIME NOT NULL,
     fecha_last_ack DATETIME NULL,

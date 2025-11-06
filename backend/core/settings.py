@@ -8,15 +8,12 @@ pymysql.install_as_MySQLdb()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Static & media
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR.parent / 'staticfiles'               # ej: /home/deploy/notificaciones/staticfiles
 STATICFILES_DIRS = [
     BASE_DIR.parent / 'frontend' / 'dist',                  # Vite build
 ]
 
-MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR.parent / 'media'
 
 SECRET_KEY = config('DJANGO_SECRET_KEY')
 
@@ -30,6 +27,7 @@ CELERY_TIMEZONE = "America/Argentina/Buenos_Aires"
 DEBUG = False
 ALLOWED_HOSTS =config('ALLOWED_HOSTS', cast=Csv()) #["*"]
 #CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = config('CORS_ORIGIN', cast=Csv())
 INSTALLED_APPS = [
     'src',
@@ -126,7 +124,6 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
-        #'rest_framework.permissions.AllowAny',
     ),
 }
 
@@ -147,7 +144,7 @@ CELERY_BROKER_URL = "redis://localhost:6379/0"
 CELERY_RESULT_BACKEND = "redis://localhost:6379/0"
 
 CELERY_BEAT_SCHEDULE = {
-    'verificar-turnos-cada-5min': {
+    'verificar-turnos-cada-1min': {
         'task': 'src.tasks.verificar_turnos',
         'schedule': 60.0,  # 30 minutos
     },

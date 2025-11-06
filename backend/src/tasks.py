@@ -485,13 +485,11 @@ def verificar_turnos():
 
 @shared_task
 def programar_recordatorios():
-    
     print(f"[{timezone.now().isoformat()}] Ejecutando recordatorios...")        
-    
+
     try:
         hoy = datetime.now().date()
 
-        # Subquery: buscar la configuración activa que coincida por efector/servicio/especialidad
         efp_qs = (
             EfeSerEspPlantilla.objects
             .filter(
@@ -500,7 +498,6 @@ def programar_recordatorios():
             )
         )
 
-        # traemos turnos desde hoy hasta hoy + max_dias (si max_dias = 0, será sólo hoy)
         rango_fin = hoy + timedelta(days=5)
 
         turnos_qs = (
@@ -550,8 +547,6 @@ def programar_recordatorios():
 
         # distribuimos envíos para turnos en días futuros: evitar picos
         per_day_counter = defaultdict(int)
-        now = timezone.now()
-
         tz = timezone.get_current_timezone()
 
         for r in resultados:
@@ -573,30 +568,54 @@ def programar_recordatorios():
                 print(f"[WARN] No se encontró turno local para id_turno={id_turno}")
                 continue
 
-            fecha_turno = t_local["fecha"]
-            hora_turno = t_local["hora"]
+            fecha_turno = t_local["fecha"]            # fecha del turno
+            hora_turno = t_local["hora"]              # hora del turno
+            dias_antes = int(t_local.get("dias_antes") or 0)
 
-            # construir send_dt de forma robusta (naive -> aware con make_aware usando tz válido)
-            dt_naive = datetime.combine(fecha_turno, hora_turno)
-            try:
-                send_dt = make_aware(dt_naive, tz)
-            except Exception as ex:
-                # fallback: intentar replace sólo si tz es un tzinfo válido
+            # fecha objetivo para el envío (la que determinó el candidato)
+            target_date = fecha_turno - timedelta(days=dias_antes)
+
+            # construir send_dt de forma robusta
+            # si el recordatorio es para el mismo día del turno (dias_antes == 0),
+            # aplicamos las reglas por hora; si no, programamos sobre target_date (ej. 10:00)
+            if dias_antes == 0:
+                dt_naive = datetime.combine(fecha_turno, hora_turno)
                 try:
-                    send_dt = dt_naive.replace(tzinfo=tz)
-                except Exception as ex2:
-                    print(f"[ERROR] No se pudo crear send_dt aware para id_turno={id_turno}: {ex} / {ex2}")
-                    continue  # saltamos este registro para evitar crash
+                    send_dt = make_aware(dt_naive, tz)
+                except Exception as ex:
+                    try:
+                        send_dt = dt_naive.replace(tzinfo=tz)
+                    except Exception as ex2:
+                        print(f"[ERROR] No se pudo crear send_dt aware para id_turno={id_turno}: {ex} / {ex2}")
+                        continue
 
-            if fecha_turno == hoy:
-                if hora_turno <= time(10, 30):
-                    send_dt = send_dt - timedelta(hours=2)
-                elif hora_turno <= time(13, 0):
-                    send_dt = send_dt - timedelta(hours=3)
+                if fecha_turno == hoy:
+                    if hora_turno <= time(10, 30):
+                        send_dt = send_dt - timedelta(hours=2)
+                    elif hora_turno <= time(13, 0):
+                        send_dt = send_dt - timedelta(hours=3)
+                    else:
+                        send_dt = send_dt - timedelta(hours=4)
                 else:
-                    send_dt = send_dt - timedelta(hours=4)
+                    # si dias_antes == 0 pero fecha_turno > hoy (raro, porque si dias_antes==0
+                    # y target_date==hoy la condición anterior debería haber filtrado),
+                    # igual colocamos envío a las 10:00 del target_date y distribuimos
+                    base_naive = datetime.combine(fecha_turno, time(10, 0))
+                    try:
+                        base = make_aware(base_naive, tz)
+                    except Exception:
+                        try:
+                            base = base_naive.replace(tzinfo=tz)
+                        except Exception:
+                            print(f"[ERROR] No se pudo crear base aware para id_turno={id_turno}")
+                            continue
+                    idx = per_day_counter[target_date]
+                    send_dt = base + timedelta(seconds=120 * idx)
+                    per_day_counter[target_date] += 1
+
             else:
-                base_naive = datetime.combine(fecha_turno, time(10, 0))
+                # dias_antes > 0 -> programar en target_date a las 10:00 (y escalonar)
+                base_naive = datetime.combine(target_date, time(10, 41))
                 try:
                     base = make_aware(base_naive, tz)
                 except Exception:
@@ -605,9 +624,9 @@ def programar_recordatorios():
                     except Exception:
                         print(f"[ERROR] No se pudo crear base aware para id_turno={id_turno}")
                         continue
-                idx = per_day_counter[fecha_turno]
+                idx = per_day_counter[target_date]
                 send_dt = base + timedelta(seconds=120 * idx)
-                per_day_counter[fecha_turno] += 1
+                per_day_counter[target_date] += 1
 
             # comparar con now aware (y debug si algo raro pasa)
             now = timezone.now()
