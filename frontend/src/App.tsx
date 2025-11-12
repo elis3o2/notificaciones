@@ -5,7 +5,7 @@ import AppRoutes from './routes/AppRoutes';
 
 const App = () => {
     return (
-        <BrowserRouter>
+        <BrowserRouter basename='/turnos'>
             <AuthProvider>
                 <AppRoutes />
             </AuthProvider>

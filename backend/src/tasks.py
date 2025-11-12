@@ -600,7 +600,7 @@ def programar_recordatorios():
                     # si dias_antes == 0 pero fecha_turno > hoy (raro, porque si dias_antes==0
                     # y target_date==hoy la condición anterior debería haber filtrado),
                     # igual colocamos envío a las 10:00 del target_date y distribuimos
-                    base_naive = datetime.combine(fecha_turno, time(10, 0))
+                    base_naive = datetime.combine(fecha_turno, time(12, 50))
                     try:
                         base = make_aware(base_naive, tz)
                     except Exception:
@@ -615,7 +615,7 @@ def programar_recordatorios():
 
             else:
                 # dias_antes > 0 -> programar en target_date a las 10:00 (y escalonar)
-                base_naive = datetime.combine(target_date, time(10, 41))
+                base_naive = datetime.combine(target_date, time(12, 50))
                 try:
                     base = make_aware(base_naive, tz)
                 except Exception:
@@ -773,6 +773,9 @@ def send_reminder_task(detalles):
 
     except Exception as e:
         print(f"[ERROR general en send_reminder_task para id_turno={id_turno}]: {e}")
+
+
+
 
 @shared_task
 def verificar_turnos2():

@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS estado_turno (
 );
 
 INSERT INTO estado_turno(id, nombre) VALUES
-(1, 'CONFIRMADO'),
+(1, 'ASIGNADO'),
 (2, 'CANCELADO'),
 (3, 'REPROGRAMADO'),
 (4, 'FINALIZADO');

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useState } from 'react';
 import {
   Box,
   Button,
@@ -9,6 +9,10 @@ import {
   IconButton,
   Menu,
   MenuItem,
+  GridLegacy as Grid,
+  FormControl,
+  InputLabel,
+  Select,
   Paper,
   Popover,
   Table,
@@ -33,10 +37,20 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import { getSignificado, getTurnosMergedLimit, getEstadomsj } from '../features/turno/api';
 import type { TurnoExtend } from '../features/turno/types';
 import { useNavigate } from 'react-router-dom';
+import type { Efector, Especialidad, Servicio } from '../features/efe_ser_esp/types';
+import { AuthContext } from '../common/contex';
+import { getServicioByEfector } from '../features/efe_ser_esp/api';
 
 export default function TurnosPage() {
   const [turnos, setTurnos] = useState<TurnoExtend[]>([]);
   const [loading, setLoading] = useState(false);
+  const { efectores } = useContext(AuthContext) as { efectores?: Efector[] };
+  const [servicios, setServicios ] = useState<Servicio[]>([]);
+  const [selectedServicio, setSelectedServicio ] = useState<Servicio | null>(null);
+  const [especialidades, setEspecialidades ] = useState<Especialidad[]>([]);
+  const [selectedEspecialidad, setSelectedEspecialidad ] = useState<Especialidad | null>(null);
+
+  const [selectedEfector, setSelectedEfector] = useState<Efector | null>(null);
   const [limit, setLimit] = useState<number>(10);
   const [hasMore, setHasMore] = useState<boolean>(true);
   const [extending, setExtending] = useState<boolean>(false);
@@ -58,14 +72,35 @@ export default function TurnosPage() {
   }, [dniQuery]);
 
   async function loadLimited(requestLimit: number) {
+    if (!selectedEfector){
+      return 
+    }
     setLoading(true);
     try {
-      const data = await getTurnosMergedLimit(requestLimit);
+      const data = await getTurnosMergedLimit(requestLimit, selectedEfector.id, selectedServicio? selectedServicio.id: null);
       setTurnos(data);
       setHasMore(data.length >= requestLimit);
     } catch (e: any) { console.error(e); }
     finally { setLoading(false); }
   }
+
+  async function loadServicio(){
+    if (!selectedEfector){
+      return
+    }
+    const data = await getServicioByEfector(selectedEfector.id)
+    setServicios(data);
+  }
+
+    useEffect(() => {
+    loadLimited(limit);
+  }, [selectedEfector, selectedServicio]);
+
+  useEffect(() => {
+    setSelectedServicio(null)
+    loadServicio()
+  }, [selectedEfector])
+
 
   async function loadAll() { await loadLimited(limit); }
 
@@ -82,9 +117,12 @@ export default function TurnosPage() {
   }
 
   async function handleLoadMore() {
+    if (!selectedEfector){
+      return
+    }
     const newLimit = limit + 10; setExtending(true);
     try {
-      const data = await getTurnosMergedLimit(newLimit);
+      const data = await getTurnosMergedLimit(newLimit, selectedEfector.id, selectedServicio ? selectedServicio.id : null);
       setTurnos(data); setLimit(newLimit); setHasMore(data.length >= newLimit);
     } catch (e: any) { console.error(e); }
     finally { setExtending(false); }
@@ -219,7 +257,7 @@ export default function TurnosPage() {
 
   function estadoChipColor(t: TurnoExtend) {
     const n = t.estado.nombre 
-    if (n == 'CONFIRMADO') return 'success';
+    if (n == 'ASIGNADO') return 'success';
     if (n == 'CANCELADO') return 'error';
     if (n == 'REPROGRAMADO') return 'warning';
     if (n == 'FINALIZADO') return 'info'
@@ -341,11 +379,65 @@ export default function TurnosPage() {
   return (
     <Box sx={{ p: 2 }}>
       {/* header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, gap: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, gap: 1 }}>
         <Box>
           <Typography variant={compactView ? 'h6' : 'h5'} fontWeight={700}>Turnos</Typography>
         </Box>
+<Box sx={{ p: 2 }}>
+    <Grid item xs={12} sm={4} md={3}>
+              <FormControl size="small" fullWidth>
+                <InputLabel id="efector-select-label">Efector</InputLabel>
+                <Select
+                  labelId="efector-select-label"
+                  value={selectedEfector?.id ?? ""}
+                  label="Efector"
+                  onChange={(e) => {
+                    const id = Number(e.target.value);
+                    const ef = efectores?.find((x) => x.id === id) ?? null;
+                    setSelectedEfector(ef);
+                  }}
+                >
+                  {efectores && efectores.length > 0 ? (
+                    efectores.map((ef) => (
+                      <MenuItem key={ef.id} value={ef.id}>
+                        {ef.nombre ?? `Efector ${ef.id}`}
+                      </MenuItem>
+                    ))
+                  ) : (
+                    <MenuItem value="">(sin efectores)</MenuItem>
+                  )}
+                </Select>
+              </FormControl>
+            </Grid>
+          
+          <Grid item xs={12} sm={4} md={3}>
+              <FormControl size="small" fullWidth>
+                <InputLabel id="servicio-select-label">Servicio</InputLabel>
+                <Select
+                  labelId="efector-select-label"
+                  value={selectedServicio?.id ?? ""}
+                  label="Servicio"
+                  onChange={(e) => {
+                    const id = Number(e.target.value);
+                    const se = servicios?.find((x) => x.id === id) ?? null;
+                    setSelectedServicio(se);
+                  }}
+                >
+                  {servicios && servicios.length > 0 ? (
+                    servicios.map((se) => (
+                      <MenuItem key={se.id} value={se.id}>
+                        {se.nombre ?? `Servicio ${se.id}`}
+                      </MenuItem>
+                    ))
+                  ) : (
+                    <MenuItem value="">(sin servicios)</MenuItem>
+                  )}
+                </Select>
+              </FormControl>
+            </Grid>
 
+
+        
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
           <TextField
             size="small"
@@ -399,7 +491,7 @@ export default function TurnosPage() {
         </MenuItem>
         <MenuItem onClick={() => navigate('/historico')}>Ir a histórico</MenuItem>
       </Menu>
-
+      </Box>
       {/* tabla */}
       <TableContainer component={Paper} elevation={4} sx={{ borderRadius: 2, overflowX: 'auto', mt: 1, maxHeight: compactView ? 620 : undefined }}>
         <Table stickyHeader size="small" sx={{ minWidth: tableMinWidth }}>

@@ -1,15 +1,30 @@
 import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
 
 export default defineConfig({
-  plugins: [react()],
+  base: '/turnos/',
+    build: {
+      outDir: 'turnos/dist'
+    },
   server: {
-    host: '0.0.0.0',
+    host: true,
     port: 5173,
-    strictPort: true,
-    allowedHosts: true
+    allowedHosts: ['salud1.dyndns.org'],
+    hmr: {
+      protocol: 'wss',
+      host: 'salud1.dyndns.org',
+      clientPort: 443,
+      path: '/turnos/@vite/client'  // importante
+    }
   },
-  resolve: {
-    dedupe: ['react', 'react-dom']
-  }
+  plugins: [
+    {
+      name: 'prefix-dev-absolute-urls',
+      transformIndexHtml(html) {
+        // reescribe las URLs en el index que comienzan con "/" para anteponer /turnos
+        return html.replace(/(href|src)=["']\/(?!turnos\/)([^"']+)["']/g, (_, a, b) => {
+          return `${a}="/turnos/${b}"`;
+        });
+      }
+    }
+  ]
 });

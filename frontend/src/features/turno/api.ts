@@ -1,4 +1,5 @@
 import http from '../../common/api/client'
+import type { Efector } from '../efe_ser_esp/types';
 import type { Turno, TurnoEspera, TurnoExtend, EstadoMsj, EstudioRequerido } from './types';
 
 export const getTurnosAll = (
@@ -92,11 +93,11 @@ export const getTurnosByCombinations = async (
 
 
 // Obtener todos los turnos con un límite de cantidad
-export const getTurnosMergedLimit = (cantidad: number): Promise<TurnoExtend[]> => {
+export const getTurnosMergedLimit = (cantidad: number, efector: number, servicio: number | null): Promise<TurnoExtend[]> => {
   if (cantidad <= 0) return Promise.resolve([]);
   const url = '/turnos-merged-all-list/';
   return http
-    .get<TurnoExtend[]>(url, { params: { cantidad } })
+    .get<TurnoExtend[]>(url, { params: { cantidad, efector, servicio } })
     .then(res => res.data);
 };
 

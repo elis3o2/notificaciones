@@ -579,6 +579,8 @@ class TurnosMergedAllAPIView(APIView):
         # Si el cliente pasó ?ids=1,2,3 -> usar esa lista. Si no, traer TODO.
         ids_param = request.query_params.get('ids')
         cantidad_param = request.query_params.get('cantidad')  # nuevo: cantidad a devolver
+        id_efector =  request.query_params.get('efector')
+        id_servicio = request.query_params.get('servicio')
         ids_order = None  # mantendrá el orden solicitado por el cliente (si aplica)
         cantidad = None
 
@@ -619,7 +621,22 @@ class TurnosMergedAllAPIView(APIView):
                 local_map = {str(obj.id): obj for obj in qs}
                 local_list = [local_map[i] for i in ids_order if i in local_map]
             else:
-                qs = Turno.objects.select_related("id_efe_ser_esp").order_by('-fecha', '-hora')
+                if not id_efector:
+                    return Response(
+                        {"detail": "Parámetro 'ids' inválido. Debe ser una lista de enteros separados por coma."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                filters = {'id_efe_ser_esp__id_efector': id_efector}
+                if id_servicio:
+                    filters['id_efe_ser_esp__id_servicio'] = id_servicio
+                
+                qs = (
+                    Turno.objects
+                    .select_related("id_efe_ser_esp")
+                    .filter(**filters)
+                    .order_by('-fecha', '-hora')
+                )
+                
                 local_list = list(qs)
 
                 # aplicar cantidad cuando no se pasaron ids
