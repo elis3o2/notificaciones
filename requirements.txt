@@ -32,3 +32,4 @@ pytz
 emoji
 JPype1
 jaydebeapi
+aiohttp

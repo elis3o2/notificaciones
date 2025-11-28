@@ -23,6 +23,12 @@ export interface EfeSerEsp {
 }
 
 
+export interface SerEsp {
+    id_ser: number;
+    ser_nombre: string;
+    especialidades: {id_esp:number, esp_nombre:string, id_efe_ser_esp:number}[]
+}
+
 export type EfeSerEspInc = {
   id_efector: number;
   id_servicio: number;
@@ -34,4 +40,14 @@ export interface EfeSerEspCompleto  {
     efector: Efector;
     servicio: Servicio;
     especialidad: Especialidad; 
+}
+
+
+export interface Deriva {
+    id: number;
+    cupo: number;
+    efector: Efector;
+    efector_deriva: Efector;
+    servicio_deriva: Servicio;
+    especialidad_deriva: Especialidad; 
 }

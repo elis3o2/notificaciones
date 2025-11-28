@@ -1,5 +1,5 @@
 import http from '../../common/api/client'
-import type { Efector, Servicio, Especialidad, EfeSerEsp, EfeSerEspCompleto } from "./types";
+import type { Efector, Servicio, Especialidad, EfeSerEsp, EfeSerEspCompleto, Deriva, SerEsp } from "./types";
 
 export const getEfectoresAll = (): Promise<Efector[]> =>
   http.get<Efector[]>(`efectores/`).then(res => res.data);
@@ -28,3 +28,11 @@ export const getEfeSerEspAll = () : Promise<EfeSerEsp[]> =>
 
 export const getIdByEfeSerEsp = (efector: number, servicio: number, especialidad: number) : Promise<EfeSerEspCompleto> =>
   http.get<EfeSerEspCompleto>(`efe_ser_esp/id/?efector=${efector}&servicio=${servicio}&especialidad=${especialidad}`).then(res => res.data)
+
+
+export const getDerivaByEfector = (id: number) : Promise<Deriva[]> =>
+  http.get<Deriva[]>(`derivaciones/?id_efector=${id}`).then(res=> res.data)
+
+
+export const getSerEspByEfector = (id: number) : Promise<SerEsp[]> =>
+  http.get<SerEsp[]>(`efe_ser_esp/ser_esp/?id_efector=${id}`).then(res => res.data); 

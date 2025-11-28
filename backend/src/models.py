@@ -39,6 +39,13 @@ class EstadoTurno(models.Model):
         managed = False
         db_table = 'estado_turno'
 
+class EstadoTurnoPaciente(models.Model):
+    id = models.IntegerField(primary_key=True)
+    nombre = models.CharField(max_length=32)
+
+    class Meta:
+        managed = False
+        db_table = 'estado_turno_paciente'
 
 
 class Efector(models.Model):
@@ -86,10 +93,27 @@ class EfeSerEsp(models.Model):
         db_table = 'efe_ser_esp'
 
 
+class Deriva(models.Model):
+    id = models.AutoField(primary_key=True)
+    id_efector = models.ForeignKey(
+        Efector, models.DO_NOTHING, db_column='id_efector')
+    id_efe_ser_esp_deriva = models.ForeignKey(
+        EfeSerEsp, models.DO_NOTHING, db_column='id_efe_ser_esp_deriva')
+    cupo = models.SmallIntegerField()
+
+    class Meta:
+        managed = False
+        db_table = 'deriva'
+
+
 class Turno(models.Model):
-    id = models.IntegerField(primary_key=True)
+    id = models.AutoField(primary_key=True)
+    id_sisr = models.IntegerField()
+    id_paciente = models.IntegerField()
     id_estado = models.ForeignKey(
         EstadoTurno, models.DO_NOTHING, db_column='id_estado')
+    id_estado_paciente = models.ForeignKey(
+        EstadoTurnoPaciente, models.DO_NOTHING, default=0, db_column='id_estado_paciente')
     fecha = models.DateField()
     hora = models.TimeField()
     msj_confirmado = models.IntegerField()
@@ -147,6 +171,7 @@ class TurnoEspera(models.Model):
     prioridad = models.IntegerField()
     fecha_hora_creacion = models.DateTimeField()
     fecha_hora_cierre = models.DateTimeField(null=True, blank=True)
+    cupo = models.BooleanField()
     usuario_creacion = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
@@ -245,3 +270,142 @@ class LastMod(models.Model):
         managed = False
         db_table = "last_mod"
 
+
+
+class TipoNodo(models.Model):
+    id = models.AutoField(primary_key=True)
+    nombre = models.CharField(max_length=16, blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'tipo_nodo'
+
+
+
+class Nodo(models.Model):
+    id = models.AutoField(primary_key=True)
+    nombre = models.CharField(max_length=24)
+    msg = models.TextField(blank=True, null=True)
+    tipo = models.ForeignKey(
+        TipoNodo, 
+        models.DO_NOTHING, 
+        db_column='id_tipo'
+    )
+    id_nodo_sig = models.ForeignKey(
+        'self', 
+        models.DO_NOTHING, 
+        db_column='id_nodo_sig', 
+        blank=True, 
+        null=True
+    )
+
+    class Meta:
+        managed = False
+        db_table = 'nodo'
+
+
+class Ruta(models.Model):
+    id = models.AutoField(primary_key=True)
+    id_nodo = models.ForeignKey(
+        Nodo, 
+        models.DO_NOTHING, 
+        db_column='id_nodo',
+        related_name='rutas_origen' 
+    )
+    nombre_ruta = models.CharField(max_length=16)
+    id_nodo_sig = models.ForeignKey(
+        Nodo, 
+        models.DO_NOTHING, 
+        db_column='id_nodo_sig',
+        related_name='rutas_destino'
+    )
+
+    class Meta:
+        managed = False
+        db_table = 'rutas'
+
+
+class PlantillaFlow(models.Model):
+    id = models.AutoField(primary_key=True)
+    nombre = models.CharField(max_length=24)
+    nodo_inicio = models.ForeignKey(
+        Nodo, 
+        models.DO_NOTHING, 
+        db_column='id_nodo_inicio'
+    )
+
+    class Meta:
+        managed = False
+        db_table = 'plantilla_flow'
+        
+
+class EstadoFlow(models.Model):
+    id = models.IntegerField(primary_key=True)
+    nombre = models.CharField(max_length=16)
+
+    class Meta:
+        managed = False
+        db_table = 'estado_flow'
+
+class Flow(models.Model):
+    id = models.CharField(primary_key=True, max_length=20)
+    id_plantilla_flow = models.ForeignKey(
+        PlantillaFlow, 
+        models.DO_NOTHING, 
+        db_column='id_plantilla_flow'
+    )
+    desde = models.CharField(max_length=15)
+    para = models.CharField(max_length=15)
+    id_estado =  models.ForeignKey(
+        EstadoFlow, 
+        models.DO_NOTHING, 
+        db_column='id_estado'
+    )
+    class Meta:
+        managed = False
+        db_table = 'flow'
+
+
+class MsgFlowEnv(models.Model):
+    id = models.AutoField(primary_key=True)
+    id_flow = models.ForeignKey(
+        Flow, 
+        models.DO_NOTHING, 
+        db_column='id_flow'
+    )
+    id_nodo = models.ForeignKey(
+        Nodo, 
+        models.DO_NOTHING, 
+        db_column='id_nodo'
+    )
+    fecha_hora = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'msg_flow_env'
+
+
+class MsgFlowRec(models.Model):
+    id = models.AutoField(primary_key=True)    
+    id_flow = models.ForeignKey(
+        Flow, 
+        models.DO_NOTHING, 
+        db_column='id_flow'
+    )
+    msg = models.TextField()
+    fecha_hora = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'msg_flow_rec'
+
+
+
+class TurnoFlow(models.Model):
+    id = models.AutoField(primary_key=True)   
+    id_turno = models.ForeignKey(Turno, models.DO_NOTHING, db_column='id_turno')
+    id_flow = models.ForeignKey(Flow, models.DO_NOTHING, db_column='id_flow')
+
+    class Meta:
+        managed = False
+        db_table = 'turno_flow'

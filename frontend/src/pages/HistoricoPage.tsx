@@ -47,14 +47,17 @@ const ALL_COLUMNS = [
 ] as const;
 
 // ---------------------- Helpers ----------------------
+// 1) safeFormat — convierte correctamente strings ISO a Date
 const safeFormat = (iso: string | null | undefined) => {
   if (!iso) return '—';
   try {
-    return iso.toLocaleString();
+    const d = typeof iso === 'string' ? new Date(iso) : (iso as unknown as Date);
+    return isNaN(d.getTime()) ? String(iso) : d.toLocaleString();
   } catch {
     return String(iso);
   }
 };
+
 
 const downloadCSV = (rows: HistoricoItem[], visibleKeys: string[], columnsMap: Record<string, string>) => {
   const headers = visibleKeys.map(k => `"${columnsMap[k] ?? k}"`);
@@ -346,7 +349,10 @@ export default function HistoricoPage(): React.ReactElement {
             )}
 
             <AnimatePresence initial={false} mode="popLayout">
-              {!loading && displayedRows.map((r, idx) => (
+            {!loading && displayedRows.map((r, idx) => {
+              const rowKey = r.idturno ? `turno-${String(r.idturno)}-${r.fecha_hora_mdf ?? ''}` : `idx-${idx}`;
+
+              return (
                 <TableRow
                   component={motion.tr}
                   layout
@@ -354,7 +360,7 @@ export default function HistoricoPage(): React.ReactElement {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }}
                   transition={{ duration: 0.18 }}
-                  key={r.idturno ?? idx}
+                  key={rowKey}
                   sx={{ '&:hover': { boxShadow: 3 } }}
                 >
                   {ALL_COLUMNS.filter(c => visibleCols[c.key]).map(col => {
@@ -388,7 +394,8 @@ export default function HistoricoPage(): React.ReactElement {
                     }
                   })}
                 </TableRow>
-              ))}
+                );
+              })}
             </AnimatePresence>
 
           </TableBody>

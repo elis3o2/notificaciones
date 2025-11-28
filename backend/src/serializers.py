@@ -5,9 +5,9 @@ from django.contrib.auth.models import AbstractUser
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework import serializers
 from src.models import (Plantilla, EstadoMsj, EstadoTurno,
-                Turno, Mensaje, Efector, Servicio, Especialidad, EfeSerEspPlantilla,
-                EstadoTurnoEspera, TurnoEspera, EfeSerEsp, EstudioRequerido)
-from src.utils import fetch_paciente, fetch_profesional
+                Turno, Mensaje, Efector, Servicio, Especialidad, Deriva, EfeSerEspPlantilla,
+                EstadoTurnoEspera, TurnoEspera, EfeSerEsp, EstudioRequerido, EstadoTurnoPaciente)
+from src.utils import fetch_paciente, fetch_profesional, get_actual_state
 import re
 from django.utils import timezone
 from datetime import datetime, date
@@ -28,9 +28,19 @@ class EstadoMsjSerializer(serializers.ModelSerializer):
         fields = '__all__' 
 
 class EstadoTurnoSerializer(serializers.ModelSerializer):
+    
     class Meta:
         model = EstadoTurno
         fields = '__all__' 
+
+
+class EstadoTurnoPacienteSerializer(serializers.ModelSerializer):
+    
+    class Meta:
+        model = EstadoTurnoPaciente
+        fields = '__all__' 
+
+
 
 class TurnoSerializer(serializers.ModelSerializer):
     class Meta:
@@ -72,6 +82,16 @@ class EfeSerEspSerializer(serializers.ModelSerializer):
         model = EfeSerEsp
         fields = ['id', 'id_efector', 'id_servicio', 'id_especialidad']
 
+
+class DerivaSerializer(serializers.ModelSerializer):
+    efector = EfectorSerializer(source='id_efector', read_only=True)
+    efector_deriva = EfectorSerializer(source='id_efe_ser_esp_deriva.id_efector', read_only=True)
+    servicio_deriva = ServicioSerializer(source='id_efe_ser_esp_deriva.id_servicio', read_only=True)
+    especialidad_deriva = EspecialidadSerializer(source='id_efe_ser_esp_deriva.id_especialidad', read_only=True)
+
+    class Meta:
+        model = Deriva
+        fields = ['id', 'cupo', 'efector', 'efector_deriva', 'servicio_deriva', 'especialidad_deriva']
 
 class EfeSerEspEfectorSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(source="id_efector.id", read_only=True)
@@ -221,7 +241,7 @@ class TurnoEsperaSerializer(serializers.ModelSerializer):
    
     class Meta:
         model = TurnoEspera
-        fields = ["id", "efector", "servicio", "especialidad", "efector_solicitante",
+        fields = ["id", "efector", "servicio","cupo","especialidad", "efector_solicitante",
                   "paciente", "profesional_solicitante", "estado", "prioridad",
                   "usuario_cierre", "usuario_creacion", "fecha_hora_creacion", 
                   "fecha_hora_cierre", "estudio_requerido"]   # incluye los id_..., más los serializer fields
@@ -261,6 +281,7 @@ class TurnoEsperaCreateSerializer(serializers.ModelSerializer):
             "id_paciente",
             "prioridad",
             "estudio_requerido",
+            "cupo",
         )
         read_only_fields = ("usuario_creacion", "fecha_hora_creacion", "id_estado")
 
@@ -388,14 +409,14 @@ class TurnoMergedSerializer(serializers.ModelSerializer):
     profesional_apellido = serializers.CharField(read_only=True, allow_null=True)
 
     estado = EstadoTurnoSerializer(source="id_estado", read_only=True)
-
+    estado_paciente = EstadoTurnoPacienteSerializer(source="id_estado_paciente", read_only=True)
     # Nuevo campo dinámico
     mensaje_asociado = serializers.SerializerMethodField()
 
     class Meta:
         model = Turno
         fields = [
-            "id", "fecha", "hora", "estado",
+            "id","fecha", "hora", "estado", "estado_paciente",
             "msj_recordatorio", "msj_confirmado", "msj_cancelado", "msj_reprogramado",
             "efe_ser_esp",
             "paciente_nombre", "paciente_apellido", "paciente_dni",
@@ -414,6 +435,10 @@ class TurnoMergedSerializer(serializers.ModelSerializer):
              .select_related("id_plantilla__id_tipo", "id_estado")
              .order_by("-fecha_envio")
             )
+        
+        for m in mensajes:
+            get_actual_state(m.id, m.id_mensaje, m.numero)
+        
         return [
             {
                 "id": m.id,
@@ -436,6 +461,7 @@ class TurnoMergedSerializer(serializers.ModelSerializer):
             }
             for m in mensajes
         ]
+    
 
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):

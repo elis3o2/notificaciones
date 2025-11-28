@@ -271,6 +271,11 @@ export default function ListaEspera(): React.ReactElement {
         <Typography variant="caption" display="block">
           Desde: {t.efector_solicitante.nombre}
         </Typography>
+        {t.cupo && (
+        <Typography  variant="caption" display="block">
+          A: {t.efector.nombre }
+        </Typography>
+        )}
       </Box>
     );
   };
@@ -494,14 +499,43 @@ const telefonoEstado = (carac: string | null | undefined, nro: string | null | u
                     </Box>
                   </Box>
 
-                  <Box sx={{ ml: 2, textAlign: "right", minWidth: 88 }}>
-                    <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                      {dias}
-                    </Typography>
+                  <Box
+                    sx={{
+                      ml: 2,
+                      textAlign: "right",
+                      minWidth: 88,
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "flex-end",
+                      gap: 0.5,
+                    }}
+                  >
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+
+                        {t.cupo ? (
+                          <Chip
+                            label="CUPO"
+                            size="small"
+                            sx={{
+                              fontWeight: 700,
+                              height: 20,
+                              lineHeight: "20px",
+                              px: 0.7,
+                            }}
+                          />
+                        ) : null}
+
+                        <Typography variant="body2" sx={{ fontWeight: 700,whiteSpace: "nowrap" }}>
+                          {dias}
+                        </Typography>
+
+                      </Box>
+
                     <Typography variant="caption" sx={{ color: "text.secondary" }}>
                       Espera
                     </Typography>
                   </Box>
+
                 </Paper>
               </Tooltip>
             );
@@ -545,6 +579,11 @@ const telefonoEstado = (carac: string | null | undefined, nro: string | null | u
               <Typography variant="body2" sx={{ mb: 0.5 }}>
                 <strong>Desde efector:</strong> {activeTurno.efector_solicitante.nombre}
               </Typography>
+              {activeTurno.cupo && (
+                <Typography variant="body2" sx={{ mb: 0.5 }}>
+                  <strong>A:</strong> {activeTurno.efector.nombre }
+                </Typography>
+              )}
               <Typography variant="body2" sx={{ mb: 0.5 }}>
                 <strong>Prioridad:</strong> {String(activeTurno.prioridad)}
               </Typography>

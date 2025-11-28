@@ -10,8 +10,8 @@ from django.db.models import OuterRef, Subquery, Exists, IntegerField, Max
 from django.utils import timezone
 from src.models import (Turno, Plantilla, Mensaje, LastMod,
                         EfeSerEspPlantilla, EstadoTurno, Efector, Servicio,
-                        Especialidad, EfeSerEsp)
-from src.utils import enviar_whatsapp, check_turno, format_plantilla
+                        Especialidad, EfeSerEsp, Flow, TurnoFlow, PlantillaFlow)
+from src.utils import enviar_whatsapp, check_turno, format_plantilla, start_flow
 
 TZ = ZoneInfo("America/Argentina/Buenos_Aires")
 
@@ -69,57 +69,6 @@ def make_query(size):
     {where_clause}
     """
 
-
-def make_query2(size):
-    if size == 1:
-        where_clause = "WHERE th.idturasghistorico = ?"
-    else:
-        placeholders = ",".join(["?"] * size)
-        where_clause = f"WHERE th.idturasghistorico IN ({placeholders})"
-
-    return f""""
-    SELECT
-        efe.idefector as idefector,
-        ser.ser as cod_ser_dtt,
-        trim(prf.nom) as prof,
-        trim(ser.nom) as servicio,
-        tdoc.abrev_doc as tipoDoc,
-        per.nro_doc as nroDoc,
-        trim(per.apellido) as apePac,
-        trim(per.nombre_per) as nomPac,
-        extend(th.fechahora_turno, year to day) as fechaTurno,
-        extend(th.fechahora_turno, hour to minute) as horaTurno,
-        efe.nombre as efector,
-        trim(efe.nomcalle) as calleEfe,
-        efe.numero as alturaCalleEfe,
-        efe.letracalle as letraCalleEfe,
-        efe.coordenadax as coordXEfe,
-        efe.coordenaday as coordYEfe,
-        efe.telefono as telEfe,
-        trim(per.carac_telef) as caracTelPacV_personas,
-        cast(per.nro_telef as varchar(20)) as telPacV_personas
-    FROM turnosdtt_historico th
-    JOIN hcsindividuales h
-    ON h.nrohci = rpad(trim(th.hc_paciente),10,' ')
-    JOIN pacientes pac
-    ON pac.idhistind = h.idhistind
-    JOIN v_personas per
-    ON per.id_persona = pac.idpaciente
-    JOIN v_tipo_doc tdoc
-    ON tdoc.cod_doc = per.cod_doc
-    JOIN hos:turasg tur
-    ON tur.prf = th.cod_prf
-    AND tur.fec = th.fechahora_turno
-    JOIN hos:turcns cns
-    ON cns.cns = tur.cns
-    JOIN efectores efe
-    ON efe.codigo = cns.efe
-    JOIN hos:cliser ser
-    ON ser.ser = tur.ser
-    JOIN hos:cliprf prf
-    ON prf.prf = th.cod_prf
-    {where_clause}
-    """
 
 def query_persona():
     return """
@@ -256,6 +205,14 @@ def verificar_turnos():
                 else:
                     continue
 
+                # Inicializo variables que luego uso (mínimo)
+                id_efe_ser_esp = None
+                id_efector = id_servicio = id_especialidad = None
+                nombre_servicio = nombre_especialidad = nombre_efector = None
+                calle = altura = letra = coordx = coordy = tel_efe = calle_nom = None
+                carac_tel = tel = nom_pac = ape_pac = nom_prof = ape_prof = None
+                d_fecha = d_hora = None
+
                 # Si corresponde (0 o 3) traigo detalles completos
                 detalles = None
                 if estado in (1, 3):
@@ -295,9 +252,11 @@ def verificar_turnos():
 
                     if estado == 1:
                         try:
-                            Turno.objects.create(
-                                id=idturno,
+                            t = Turno.objects.create(
+                                id_sisr=idturno,
+                                id_paciente=idpaciente,
                                 id_estado_id=estado,
+                                id_estado_paciente_id=0,
                                 msj_confirmado=0,
                                 msj_reprogramado=0,
                                 msj_cancelado=0,
@@ -313,12 +272,19 @@ def verificar_turnos():
 
                 if estado in (2, 3, 4):
                     try:
-                        filas_actualizadas = Turno.objects.filter(id=idturno).update(id_estado_id=estado)
-                        if filas_actualizadas == 0:
+                        # FIX MÍNIMO: obtener instancia segura (antes usabas get + luego first()/update() en instancia)
+                        t = Turno.objects.filter(id_sisr=idturno, id_paciente=idpaciente).first()
+                        if t is None:
                             print(f"[DEBUG] No existe Turno local con id={idturno} => se ignora notificación (estado={estado})")
                             continue
 
-                        print(f"[INFO] Actualizado Turno id={idturno} a estado={estado} (filas_actualizadas={filas_actualizadas})")
+                        # Asignar estado en la instancia y guardar (mínimo)
+                        if t.id_estado_id != estado:
+                            t.id_estado_id = estado
+                            t.save(update_fields=["id_estado_id"])
+
+                        # Eliminé la referencia a filas_actualizadas que no estaba definida
+                        print(f"[INFO] Actualizado Turno id={idturno} a estado={estado}")
                     except Exception as ex:
                         print(f"[ERROR] al actualizar Turno id={idturno}: {ex}")
                         continue
@@ -335,19 +301,25 @@ def verificar_turnos():
                                 ape_pac = nom_pac = carac_tel = tel = None
 
                             # --- cambio mínimo: obtener id_efe_ser_esp desde Turno si no lo tenemos
-                            id_efe_ser_esp = Turno.objects.filter(id=idturno).values_list("id_efe_ser_esp_id", flat=True).first()
+                            id_efe_ser_esp = getattr(t, "id_efe_ser_esp_id", id_efe_ser_esp)
 
                             # obtener EfeSerEsp para sacar efector/servicio/especialidad (asumimos que existe)
-                            ese_obj = EfeSerEsp.objects.select_related(
-                                "id_efector", "id_servicio", "id_especialidad"
-                            ).get(pk=id_efe_ser_esp)
+                            ese_obj = None
+                            if id_efe_ser_esp:
+                                try:
+                                    ese_obj = EfeSerEsp.objects.select_related(
+                                        "id_efector", "id_servicio", "id_especialidad"
+                                    ).get(pk=id_efe_ser_esp)
+                                except EfeSerEsp.DoesNotExist:
+                                    ese_obj = None
 
-                            id_efector = ese_obj.id_efector_id
-                            id_servicio = ese_obj.id_servicio_id
-                            id_especialidad = ese_obj.id_especialidad_id
+                            if ese_obj:
+                                id_efector = ese_obj.id_efector_id
+                                id_servicio = ese_obj.id_servicio_id
+                                id_especialidad = ese_obj.id_especialidad_id
 
-                            nombre_servicio = ese_obj.id_servicio.nombre if hasattr(ese_obj, "id_servicio") and ese_obj.id_servicio else None
-                            nombre_especialidad = ese_obj.id_especialidad.nombre if hasattr(ese_obj, "id_especialidad") and ese_obj.id_especialidad else None
+                                nombre_servicio = ese_obj.id_servicio.nombre if hasattr(ese_obj, "id_servicio") and ese_obj.id_servicio else None
+                                nombre_especialidad = ese_obj.id_especialidad.nombre if hasattr(ese_obj, "id_especialidad") and ese_obj.id_especialidad else None
 
                             # datos del efector vía cursor Informix
                             nombre_efector = calle = altura = letra = coordx = coordy = tel_efe = calle_nom = None
@@ -359,8 +331,8 @@ def verificar_turnos():
                                     coordx, coordy, tel_efe, calle_nom) = ef_row
 
                             # obtener fecha/hora guardadas en Turno (siempre strings según create)
-                            fecha_literal = Turno.objects.filter(id=idturno).values_list("fecha", flat=True).first()
-                            hora_literal = Turno.objects.filter(id=idturno).values_list("hora", flat=True).first()
+                            fecha_literal = getattr(t, "fecha", None)
+                            hora_literal = getattr(t, "hora", None)
 
                             # intentar parsear sin hacer chequeos extra (cambio mínimo)
                             try:
@@ -383,7 +355,7 @@ def verificar_turnos():
 
                 # Asegurar que id_efe_ser_esp esté definido antes de check_turno:
                 if "id_efe_ser_esp" not in locals() or id_efe_ser_esp is None:
-                    id_efe_ser_esp = Turno.objects.filter(id=idturno).values_list("id_efe_ser_esp_id", flat=True).first()
+                    id_efe_ser_esp = getattr(t, "id_efe_ser_esp_id", None)
 
                 telefono = None
                 send, plantilla = check_turno(id_efe_ser_esp, estado)
@@ -415,10 +387,12 @@ def verificar_turnos():
                         response_data = getattr(res, "data", {}) or {}
 
                         if res.status_code == 503:
-                            ack = -4
+                            ack = -5
                         elif res.status_code == 400:
-                            ack = -3
+                            ack = -4
                         elif res.status_code == 404:
+                            ack = -3
+                        elif res.status_code == 422:
                             ack = -2
                         elif res.status_code == 500:
                             ack = -1
@@ -428,7 +402,7 @@ def verificar_turnos():
                         try:
                             Mensaje.objects.create(
                                 id_mensaje=response_data.get("id", None),
-                                id_turno_id=idturno,
+                                id_turno=t,
                                 numero=telefono,
                                 id_plantilla=plantilla,
                                 fecha_envio=datetime.now(),
@@ -441,20 +415,22 @@ def verificar_turnos():
                         if ack >= 0:  # actualizar flags en Turno
                             try:
                                 if estado == 1:
-                                    Turno.objects.filter(id=idturno).update(msj_confirmado=1)
+                                    t.msj_confirmado = 1
+                                    t.save(update_fields=["msj_confirmado"])
                                 elif estado == 2:
-                                    Turno.objects.filter(id=idturno).update(msj_cancelado=1)
+                                    t.msj_cancelado = 1
+                                    t.save(update_fields=["msj_cancelado"])
                                 elif estado == 3:
-                                    Turno.objects.filter(id=idturno).update(msj_reprogramado=1)
+                                    t.msj_reprogramado = 1
+                                    t.save(update_fields=["msj_reprogramado"])
                             except Exception as ex:
                                 print(f"[ERROR] al actualizar flags msj_* en Turno id={idturno}: {ex}")
                     else:
                         print(f"[DEBUG] No hay teléfono válido para idturno={idturno} (carac_tel={carac_tel}, tel={tel})")
                         try:
                             Mensaje.objects.create(
-                                id_turno_id=idturno,
+                                id_turno=t,
                                 id_plantilla=plantilla,
-                                numero=telefono,
                                 fecha_envio=datetime.now(),
                                 id_estado_id=-3,
                             )
@@ -481,6 +457,7 @@ def verificar_turnos():
 
     except Exception as e:
         print(f"[ERROR] Error en verificación de turnos: {e}")
+
 
 
 @shared_task
@@ -510,7 +487,7 @@ def programar_recordatorios():
             )
             .filter(efp_exists=True)
             .order_by('fecha', 'hora')
-            .values('id', 'id_efe_ser_esp',
+            .values('id','id_sisr', 'id_efe_ser_esp',
                     'fecha', 'hora', 'dias_antes', 'plantilla_reco')
         )
 
@@ -531,8 +508,8 @@ def programar_recordatorios():
             print("Ningún turno requiere recordatorio hoy.")
             return
 
-        turnos_ids = [t['id'] for t in candidatos]
-        turnos_map = {t["id"]: t for t in candidatos}
+        turnos_ids = [t['id_sisr'] for t in candidatos]
+        turnos_map = {t["id_sisr"]: t for t in candidatos}
 
         conn = connections['informix']
         resultados = []
@@ -652,12 +629,15 @@ def programar_recordatorios():
         print(f"Error en recordatorios: {str(e)}")
 
 
-@shared_task
-def send_reminder_task(detalles):
+# Usa bind=True para poder llamar self.retry()
+@shared_task(bind=True, max_retries=5, default_retry_delay=3600)
+def send_reminder_task(self, detalles):
     """
-    detalles: tupla con los campos que devuelve make_query (ver SELECT antes)
-    id_turno: id del Turno que viene de la query
+    detalles: tupla que devuelve make_query (ver SELECT antes)
     """
+    # seguridad: inicializar ack
+    ack = None
+
     try:
         (
             id_turno,
@@ -672,394 +652,172 @@ def send_reminder_task(detalles):
         print(f"[ERROR] detalles inválidos para turno: {ex}")
         return
 
+    need_retry = False  # bandera para reintentar después del commit
 
     try:
-        turno = Turno.objects.filter(pk=id_turno).first()
-        if not turno:
-            print(f"[WARN] Turno {id_turno} no existe.")
-            return
-
-        # Si el turno cambió de estado o ya tiene recordatorio, no enviamos
-        if turno.id_estado_id != 1 or turno.msj_recordatorio == 1:
-            print(f"Cambio de estado o ya enviado para turno {id_turno}, abortando envío.")
-            return
-
-
-        # comprobar si aún corresponde (ej: chequeos de configuración dinámica)
-        send_flag, plantilla = check_turno(id_efe_ser_esp, 4)
-        if not send_flag or not plantilla:
-            print(f"[DEBUG] check_turno returned send={send_flag}, plantilla={plantilla} for turno {id_turno}")
-            return
-
-        # validar teléfono
-        if not carac_tel or not tel:
-            print(f"[DEBUG] No hay teléfono válido para id_turno={id_turno} (carac={carac_tel}, tel={tel})")
-            try:
-                Mensaje.objects.create(
-                    id_turno_id=id_turno,
-                    id_plantilla_id=getattr(plantilla, "id"),
-                    fecha_envio=datetime.now(),
-                    id_estado_id=-3,
-                )
-            except Exception as ex:
-                print(f"[ERROR] al crear Mensaje para turno {id_turno}: {ex}")
-            return
-
-        telefono = ("549" + str(carac_tel) + str(tel)).replace(" ", "")
-
-        fecha_literal = str(fecha_turno).split(" ")[0]
-        s_h = str(hora_turno).split(".")[0]
-        if " " in s_h:
-            hora_literal = s_h.split(" ", 1)[1]
-        else:
-            hora_literal = s_h
-
-        datos_plantilla = {
-            "nompac": nom_pac or "",
-            "apepac": ape_pac or "",
-            "fecha": fecha_literal,
-            "horaturno": hora_literal,
-            "nomprof": nom_prof or "",
-            "apeprof": ape_prof or "",
-            "especialidad": nombre_especialidad or "",
-            "efector": nombre_efector or "",
-            "nombre_servicio": nombre_servicio or "",
-            "calle": calle or "",
-            "altura": altura or "",
-            "letra": letra or "",
-            "coordx": coordx or "",
-            "coordy": coordy or "",
-            "tel_efe": tel_efe or "",
-            "calle_nom": calle_nom or "",
-        }
-
-        mensaje = format_plantilla(plantilla.contenido, datos_plantilla)
-        res = enviar_whatsapp(telefono, mensaje)
-        response_data = getattr(res, "data", {}) or {}
-
-
-
-        # mapear estados a ack
-        status = getattr(res, "status_code", None)
-        if status == 503:
-            ack = -4
-        elif status == 400:
-            ack = -3
-        elif status == 404:
-            ack = -2
-        elif status == 500:
-            ack = -1
-        else:
-            ack = response_data.get("ack", None)
-
-        try:
-            Mensaje.objects.create(
-                id_mensaje=response_data.get("id", None),
-                id_turno_id=id_turno,
-                numero=telefono,
-                id_plantilla_id=getattr(plantilla, "id"),
-                fecha_envio=datetime.now(),
-                id_estado_id=ack,
+        with transaction.atomic():
+            # 🔒 LOCK del turno (FOR UPDATE)
+            turno = (
+                Turno.objects
+                .select_for_update()
+                .filter(id_sisr=id_turno)
+                .first()
             )
-        except Exception as ex:
-            print(f"[ERROR] al crear Mensaje para turno {id_turno}: {ex}")
-            return
 
-        if ack >= 0:
+            if not turno:
+                print(f"[WARN] Turno {id_turno} no existe.")
+                return
+
+            # Si el turno cambió de estado o ya tiene recordatorio, no enviamos
+            if turno.id_estado_id != 1 or turno.msj_recordatorio == 1:
+                print(f"Cambio de estado o ya enviado para turno {id_turno}, abortando envío.")
+                return
+
+            # comprobar si aún corresponde (ej: chequeos de configuración dinámica)
+            send_flag, plantilla = check_turno(id_efe_ser_esp, 4)
+            if not send_flag or not plantilla:
+                print(f"[DEBUG] check_turno returned send={send_flag}, plantilla={plantilla} for turno {id_turno}")
+                return
+
+            # validar teléfono
+            if not carac_tel or not tel:
+                print(f"[DEBUG] No hay teléfono válido para id_turno={id_turno} (carac={carac_tel}, tel={tel})")
+                try:
+                    Mensaje.objects.create(
+                        id_turno=turno,
+                        id_plantilla_id=getattr(plantilla, "id"),
+                        fecha_envio=datetime.now(),
+                        id_estado_id=-3,
+                    )
+                except Exception as ex:
+                    print(f"[ERROR] al crear Mensaje para turno {id_turno}: {ex}")
+                return
+
+            telefono = ("549" + str(carac_tel) + str(tel)).replace(" ", "")
+
+            # Si existe algun TurnoFlow con Flow en estado 0, marcamos reintento
+            if Flow.objects.filter(para=telefono, id_estado_id=0).exists():
+                print(f"[INFO] Existe TurnoFlow con Flow abierto {id_turno}, reintentando luego.")
+                need_retry = True
+            else:
+            
+                # parsear fecha/hora con seguridad
+
+                d_fecha = parse_date(fecha_turno)
+                d_hora = parse_time(hora_turno)
+                d_fecha_str = d_fecha.strftime("%d-%m-%Y")
+                d_hora_str = d_hora.strftime("%H:%M")
+
+                datos_plantilla = {
+                    "nompac": nom_pac or "",
+                    "apepac": ape_pac or "",
+                    "fecha": d_fecha_str,
+                    "horaturno": d_hora_str,
+                    "nomprof": nom_prof or "",
+                    "apeprof": ape_prof or "",
+                    "especialidad": nombre_especialidad or "",
+                    "efector": nombre_efector or "",
+                    "nombre_servicio": nombre_servicio or "",
+                    "calle": calle or "",
+                    "altura": altura or "",
+                    "letra": letra or "",
+                    "coordx": coordx or "",
+                    "coordy": coordy or "",
+                    "tel_efe": tel_efe or "",
+                    "calle_nom": calle_nom or "",
+                }
+
+                mensaje = format_plantilla(plantilla.contenido, datos_plantilla)
+
+                # enviar_whatsapp puede devolver distintos tipos; proteger acceso
+                try:
+                    res = enviar_whatsapp(telefono, mensaje)
+                except Exception as ex:
+                    print(f"[ERROR] enviar_whatsapp falló para turno {id_turno}: {ex}")
+                    # si querés reintentar por fallo transitorio, podés usar self.retry(exc=ex)
+                    raise
+
+                response_data = getattr(res, "data", {}) or {}
+                status_code = getattr(res, "status_code", None)
+
+                # mapear estados a ack
+                if status_code == 503:
+                    ack = -5
+                elif status_code == 400:
+                    ack = -4
+                elif status_code == 404:
+                    ack = -3
+                elif status_code == 422:
+                    ack = -2
+                elif status_code == 500:
+                    ack = -1
+                else:
+                    # si no hay status_code, intentar sacar ack del body
+                    ack = response_data.get("ack")
+
+                try:
+                    Mensaje.objects.create(
+                        id_mensaje=response_data.get("id", None),
+                        id_turno=turno,
+                        numero=telefono,
+                        id_plantilla_id=getattr(plantilla, "id"),
+                        fecha_envio=datetime.now(),
+                        id_estado_id=ack,
+                    )
+                except Exception as ex:
+                    print(f"[ERROR] al crear Mensaje para turno {id_turno}: {ex}")
+                    return
+
+                if ack is not None and ack >= 0:
+                    turno.msj_recordatorio = 1
+                    turno.save(update_fields=["msj_recordatorio"])
+
+        # FIN transaction.atomic()
+
+        # si marcamos reintento, lo hacemos **fuera** del atomic y usando el mecanismo de Celery
+        if need_retry:
             try:
-                Turno.objects.filter(id=id_turno).update(msj_recordatorio=1)
+                # self.retry lanzará una excepción especial que marca el task como reintentado
+                raise self.retry(exc=Exception("Flow activo, reintentando más tarde"))
+            except self.MaxRetriesExceededError:
+                print(f"[WARN] Max retries excedidos para turno {id_turno}. No se enviará recordatorio.")
+                return
+
+        # Si ack >= 0 iniciamos el flow de confirmación
+        if ack is not None and ack >= 0:
+            try:
+                res = start_flow(telefono, "confirmacion-turno")
             except Exception as ex:
-                print(f"[ERROR] al actualizar flags msj_* en Turno id={id_turno}: {ex}")
+                print(f"[ERROR] start_flow falla para turno {id_turno}: {ex}")
+                return
+
+            status_code = getattr(res, "status_code", None)
+            body = getattr(res, "data", {}) or {}
+            if status_code == 200 and isinstance(body, dict):
+                flow_pk = body.get("id")
+                # plantilla de ejemplo: ajustar si corresponde
+                plantilla_flow = PlantillaFlow.objects.get(pk=1)
+                if flow_pk:
+                    f, created = Flow.objects.get_or_create(
+                        pk=flow_pk,
+                        defaults={
+                            "id_plantilla_flow": plantilla_flow,
+                            "para": telefono,
+                            "desde": "3416082860",
+                            "id_estado_id": 0
+                        },
+                    )
+                    # si ya existía y querés forzar estado a 0:
+                    if not created and f.id_estado_id != 0:
+                        f.id_estado_id = 0
+                        f.save(update_fields=["id_estado_id"])
+
+                    # crear TurnoFlow idempotente
+                    TurnoFlow.objects.get_or_create(id_turno=turno, id_flow=f)
+
+                    # actualizar estado paciente
+                    turno.id_estado_paciente_id = 4
+                    turno.save(update_fields=["id_estado_paciente"])
 
     except Exception as e:
         print(f"[ERROR general en send_reminder_task para id_turno={id_turno}]: {e}")
-
-
-
-
-@shared_task
-def verificar_turnos2():
-    print(f"[{timezone.now()}] Ejecutando verificación de turnos...")
-    tz = pytz.timezone(settings.TIME_ZONE)
-    # Obtener/crear LastMod (mantener aware si USE_TZ)
-    try:
-        last_mod_obj = LastMod.objects.first()
-        if not last_mod_obj:
-            lm0 = datetime(1970, 1, 1, 0, 0, 0)
-            if settings.USE_TZ:
-                lm0 = timezone.make_aware(lm0, timezone.get_default_timezone())
-            last_mod_obj = LastMod.objects.create(fecha=lm0)
-        last_mod_raw = last_mod_obj.fecha
-    except Exception as e:
-        print(f"[ERROR] al obtener/crear LastMod: {e}")
-        return
-
-    try:
-        conn = connections['informix']
-        with conn.cursor() as cur:
-            lm_param = last_mod_raw.strftime("%Y-%m-%d %H:%M:%S")
-            print(f"[DEBUG] Usando last_mod para consulta Informix: {lm_param!r}")
-
-            try:
-                cur.execute("""
-                    SELECT idturasighistorico, idestadoturno, fecha_hora_mdf
-                    FROM turnosdtt_historico
-                    WHERE fecha_hora_mdf > ?
-                    ORDER BY fecha_hora_mdf
-                """, [lm_param])
-            except Exception as ex:
-                print(f"[ERROR] al ejecutar consulta de notificaciones con param {lm_param!r}: {ex}")
-                return
-
-            mejor_raw = None
-
-            for r in cur.fetchall():
-                print(f"[DEBUG] notificacion raw: {r}")
-                idturno, idestadoturno,  last_modf_val = r
-
-                este_raw = str(last_modf_val).split(".")[0]
-                if mejor_raw is None or este_raw > mejor_raw:
-                    mejor_raw = este_raw
-
-                # Mapeo de idestadoturno -> estado (restaurado al mapping esperado)
-                if idestadoturno == 3:
-                    estado = 1
-                elif idestadoturno in (4, 5, 6):
-                    estado = 4
-                elif idestadoturno in (1, 2, 7):
-                    estado = 2
-                elif idestadoturno == 8:
-                    estado = 3
-                else:
-                    continue
-
-                # Si corresponde (0 o 3) traigo detalles completos
-                detalles = None
-                if estado in (1, 3):
-                    try:
-                        cur.execute(make_query2(1), [idturno])
-                        detalles = cur.fetchone()
-                    except Exception as ex:
-                        print(f"[ERROR] al ejecutar make_query() para idturno={idturno}: {ex}")
-                        continue
-
-                    if not detalles:
-                        print(f"[DEBUG] No hay detalles para idturno={idturno}")
-                        continue
-
-                    (
-                        _id_from_row, id_efector, cod_ser_dtt, id_efe_ser_esp ,
-                        tipo_doc, nro_doc, ape_pac, nom_pac, fecha_turno, hora_turno,
-                        ape_prof, nom_prof, nombre_servicio, nombre_especialidad,
-                        nombre_efector, calle, altura, letra, coordx, coordy,
-                        tel_efe, calle_nom, carac_tel, tel
-                    ) = detalles
-                    # parsear
-                    d_fecha = parse_date(fecha_turno)
-                    d_hora = parse_time(hora_turno)
-
-                    d_fecha = d_fecha.strftime("%d-%m-%Y")
-                    d_hora = d_hora.strftime("%H:%M")
-
-                    # formatear al formato pedido: '%d-%m-%Y' y '%H:%M'
-                    fecha_literal = str(fecha_turno).split(" ")[0]
-
-                    s_h = str(hora_turno).split(".")[0] 
-                    if " " in s_h:
-                        hora_literal = s_h.split(" ", 1)[1] 
-                    else:
-                        hora_literal = s_h
-
-                    if estado == 1:
-                        try:
-                            Turno.objects.create(
-                                id=idturno,
-                                id_estado_id=estado,
-                                msj_confirmado=0,
-                                msj_reprogramado=0,
-                                msj_cancelado=0,
-                                msj_recordatorio=0,
-                                id_efe_ser_esp_id=id_efe_ser_esp,
-                                fecha=fecha_literal,
-                                hora=hora_literal
-                            )
-                            print(f"[INFO] Creado Turno id={idturno} fecha={fecha_literal} hora={hora_literal}")
-                        except Exception as ex:
-                            print(f"[ERROR] al crear Turno id={idturno}: {ex}")
-                            continue
-
-                if estado in (2, 3, 4):
-                    try:
-                        filas_actualizadas = Turno.objects.filter(id=idturno).update(id_estado_id=estado)
-                        if filas_actualizadas == 0:
-                            print(f"[DEBUG] No existe Turno local con id={idturno} => se ignora notificación (estado={estado})")
-                            continue
-
-                        print(f"[INFO] Actualizado Turno id={idturno} a estado={estado} (filas_actualizadas={filas_actualizadas})")
-                    except Exception as ex:
-                        print(f"[ERROR] al actualizar Turno id={idturno}: {ex}")
-                        continue
-
-                    # Si estado == 2 (suspendido) traer persona + efector + enviar
-                    if estado == 2:
-                        try:
-                            # obtener datos persona de forma segura
-                            cur.execute(query_persona(), [idpaciente])
-                            persona_row = cur.fetchone()
-                            if persona_row:
-                                ape_pac, nom_pac, carac_tel, tel = persona_row
-                            else:
-                                ape_pac = nom_pac = carac_tel = tel = None
-
-                            # --- cambio mínimo: obtener id_efe_ser_esp desde Turno si no lo tenemos
-                            id_efe_ser_esp = Turno.objects.filter(id=idturno).values_list("id_efe_ser_esp_id", flat=True).first()
-
-                            # obtener EfeSerEsp para sacar efector/servicio/especialidad (asumimos que existe)
-                            ese_obj = EfeSerEsp.objects.select_related(
-                                "id_efector", "id_servicio", "id_especialidad"
-                            ).get(pk=id_efe_ser_esp)
-
-                            id_efector = ese_obj.id_efector_id
-                            id_servicio = ese_obj.id_servicio_id
-                            id_especialidad = ese_obj.id_especialidad_id
-
-                            nombre_servicio = ese_obj.id_servicio.nombre if hasattr(ese_obj, "id_servicio") and ese_obj.id_servicio else None
-                            nombre_especialidad = ese_obj.id_especialidad.nombre if hasattr(ese_obj, "id_especialidad") and ese_obj.id_especialidad else None
-
-                            # datos del efector vía cursor Informix
-                            nombre_efector = calle = altura = letra = coordx = coordy = tel_efe = calle_nom = None
-                            if id_efector:
-                                cur.execute(query_efector(), [id_efector])
-                                ef_row = cur.fetchone()
-                                if ef_row:
-                                    (nombre_efector, calle, altura, letra,
-                                    coordx, coordy, tel_efe, calle_nom) = ef_row
-
-                            # obtener fecha/hora guardadas en Turno (siempre strings según create)
-                            fecha_literal = Turno.objects.filter(id=idturno).values_list("fecha", flat=True).first()
-                            hora_literal = Turno.objects.filter(id=idturno).values_list("hora", flat=True).first()
-
-                            # intentar parsear sin hacer chequeos extra (cambio mínimo)
-                            try:
-                                d_fecha = parse_date(fecha_literal).strftime("%d-%m-%Y")
-                            except Exception:
-                                d_fecha = fecha_literal
-                            try:
-                                d_hora = parse_time(hora_literal).strftime("%H:%M")
-                            except Exception:
-                                d_hora = hora_literal
-
-                            nom_prof = None
-                            ape_prof = None
-                        except Exception as ex:
-                            print(f"[ERROR] al procesar estado 2 para idturno={idturno}: {ex}")
-                            continue
-
-                if estado == 4:
-                    continue
-
-                # Asegurar que id_efe_ser_esp esté definido antes de check_turno:
-                if "id_efe_ser_esp" not in locals() or id_efe_ser_esp is None:
-                    id_efe_ser_esp = Turno.objects.filter(id=idturno).values_list("id_efe_ser_esp_id", flat=True).first()
-
-                telefono = None
-                send, plantilla = check_turno(id_efe_ser_esp, estado)
-                if send and plantilla:
-                    if carac_tel and tel:
-                        telefono = ("549" + str(carac_tel) + str(tel)).replace(" ", "")
-
-                        datos_plantilla = {
-                            "nompac": nom_pac or "",
-                            "apepac": ape_pac or "",
-                            "fecha": d_fecha,
-                            "horaturno": d_hora,
-                            "nomprof": nom_prof or "",
-                            "apeprof": ape_prof or "",
-                            "especialidad": nombre_especialidad or "",
-                            "efector": nombre_efector or "",
-                            "servicio": nombre_servicio or "",
-                            "calle": calle or "",
-                            "altura": altura or "",
-                            "letra": letra or "",
-                            "coordx": coordx or "",
-                            "coordy": coordy or "",
-                            "tel_efe": tel_efe or "",
-                            "calle_nom": calle_nom or "",
-                        }
-
-                        mensaje = format_plantilla(plantilla.contenido, datos_plantilla)
-                        res = enviar_whatsapp(telefono, mensaje)
-                        response_data = getattr(res, "data", {}) or {}
-
-                        if res.status_code == 503:
-                            ack = -4
-                        elif res.status_code == 400:
-                            ack = -3
-                        elif res.status_code == 404:
-                            ack = -2
-                        elif res.status_code == 500:
-                            ack = -1
-                        else:
-                            ack = response_data.get("ack")
-
-                        try:
-                            Mensaje.objects.create(
-                                id_mensaje=response_data.get("id", None),
-                                id_turno_id=idturno,
-                                numero=telefono,
-                                id_plantilla=plantilla,
-                                fecha_envio=datetime.now(),
-                                id_estado_id=ack,
-                            )
-                        except Exception as ex:
-                            print(f"[ERROR] al crear Mensaje para turno {idturno}: {ex}")
-                            continue
-
-                        if ack >= 0:  # actualizar flags en Turno
-                            try:
-                                if estado == 1:
-                                    Turno.objects.filter(id=idturno).update(msj_confirmado=1)
-                                elif estado == 2:
-                                    Turno.objects.filter(id=idturno).update(msj_cancelado=1)
-                                elif estado == 3:
-                                    Turno.objects.filter(id=idturno).update(msj_reprogramado=1)
-                            except Exception as ex:
-                                print(f"[ERROR] al actualizar flags msj_* en Turno id={idturno}: {ex}")
-                    else:
-                        print(f"[DEBUG] No hay teléfono válido para idturno={idturno} (carac_tel={carac_tel}, tel={tel})")
-                        try:
-                            Mensaje.objects.create(
-                                id_turno_id=idturno,
-                                id_plantilla=plantilla,
-                                numero=telefono,
-                                fecha_envio=datetime.now(),
-                                id_estado_id=-3,
-                            )
-                        except Exception as ex:
-                            print(f"[ERROR] al crear Mensaje para turno {idturno}: {ex}")
-                else:
-                    print(f"[DEBUG] check_turno returned send={send}, plantilla={plantilla} for turno {idturno}")
-
-            # Al final: actualizar LastMod con mejor_raw EXACTO (SQL directo en default_connection)
-            try:
-                if mejor_raw is None:
-                    print("[DEBUG] No se encontró mejor_raw -> no se actualiza LastMod")
-                else:
-                    table_name = LastMod._meta.db_table
-                    pk_col = LastMod._meta.pk.column
-                    with default_connection.cursor() as cur2:
-                        cur2.execute(
-                            f"UPDATE {table_name} SET fecha = %s WHERE {pk_col} = %s",
-                            [mejor_raw, last_mod_obj.pk]
-                        )
-                    print(f"[DEBUG] Actualizado LastMod.fecha EXACTO = {mejor_raw!r} (UPDATE directo)")
-            except Exception as ex:
-                print(f"[ERROR] al actualizar LastMod con SQL directo: {ex}")
-
-    except Exception as e:
-        print(f"[ERROR] Error en verificación de turnos: {e}")
-
-
-
-
-

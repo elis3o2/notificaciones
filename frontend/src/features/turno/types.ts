@@ -28,6 +28,7 @@ export interface TurnoEspera {
     fecha_hora_cierre: string | null;
     usuario_creacion: User;
     usuario_cierre: User | null;
+    cupo: boolean;
 }
 
 export interface EstadoTurno {
@@ -35,6 +36,10 @@ export interface EstadoTurno {
     nombre: string
 }
 
+export interface EstadoTurnoPaciente {
+    id: number,
+    nombre: string
+}
 
 
 export interface EstadoMsj {
@@ -46,6 +51,7 @@ export interface EstadoMsj {
 export interface TurnoExtend {
     id: number;
     estado: EstadoTurno;
+    estado_paciente: EstadoTurnoPaciente;
     fecha: string;
     hora: string;
     msj_confirmado: number;

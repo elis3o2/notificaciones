@@ -14,65 +14,219 @@ import {
 } from "@mui/material";
 
 import {
-  getServiciosAll,
-  getEspecialidadesByServicio,
-  getEfectoresByServEsp,
-  getIdByEfeSerEsp, // <-- asegúrate de exportarla desde tu api
+  getSerEspByEfector,
+  getDerivaByEfector,
+  getIdByEfeSerEsp,
 } from "../../efe_ser_esp/api";
 
-import type { Efector, Servicio, Especialidad, EfeSerEspCompleto } from "../../efe_ser_esp/types";
+import type {
+  Efector,
+  Servicio,
+  Especialidad,
+  EfeSerEspCompleto,
+  Deriva,
+  SerEsp,
+} from "../../efe_ser_esp/types";
 
 interface Props {
-  setEfeSerEspSeleccionado: React.Dispatch<React.SetStateAction<EfeSerEspCompleto | null>>;
+  setCupo: React.Dispatch<React.SetStateAction<boolean>>;
+  efector: Efector;
+  setEfeSerEspSeleccionado: React.Dispatch<
+    React.SetStateAction<EfeSerEspCompleto | null>
+  >;
   setFinishEfeSerEsp: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
-export default function LookEfeSerEsp({ setEfeSerEspSeleccionado, setFinishEfeSerEsp }: Props) {
+export default function LookEfeSerEsp({
+  setCupo,
+  efector,
+  setEfeSerEspSeleccionado,
+  setFinishEfeSerEsp,
+}: Props) {
+  const [serEsp, setSerEsp] = useState<SerEsp[]>([]);
+  const [derivaciones, setDerivaciones] = useState<Deriva[]>([]);
+
   const [servicios, setServicios] = useState<Servicio[]>([]);
-  const [selectedServicio, setSelectedServicio] = useState<Servicio | null>(null);
+  const [selectedServicio, setSelectedServicio] = useState<Servicio | null>(
+    null
+  );
 
   const [especialidades, setEspecialidades] = useState<Especialidad[]>([]);
-  const [selectedEspecialidad, setSelectedEspecialidad] = useState<Especialidad | null>(null);
+  const [selectedEspecialidad, setSelectedEspecialidad] =
+    useState<Especialidad | null>(null);
 
   const [efectores, setEfectores] = useState<Efector[]>([]);
   const [selectedEfector, setSelectedEfector] = useState<Efector | null>(null);
 
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false); // para la llamada de confirm
-//  const [loadingServicios, setLoadingServicios] = useState(false);
+  const [loading, setLoading] = useState(false);
 
+  // -----------------------
+  // Helper mappers
+  // -----------------------
+  const mapSerEspServiceToServicio = (s: SerEsp): Servicio => {
+    return { id: s.id_ser, nombre: s.ser_nombre } as Servicio;
+  };
+
+  const mapSerEspEspecialidadToEspecialidad = (
+    esp: { id_esp: number; esp_nombre: string }
+  ): Especialidad => {
+    return { id: esp.id_esp, nombre: esp.esp_nombre } as Especialidad;
+  };
+
+  // -----------------------
+  // Load on mount: both endpoints
+  // -----------------------
   useEffect(() => {
-   // setLoadingServicios(true);
-    getServiciosAll()
-      .then(setServicios)
-      .catch(() => setError("Error al cargar servicios"))
-      //.finally(() => setLoadingServicios(false));
-  }, []);
+    let mounted = true;
+    async function load() {
+      setError(null);
+      try {
+        const [sres, dres] = await Promise.all([
+          getSerEspByEfector(efector.id),
+          getDerivaByEfector(efector.id),
+        ]);
+        if (!mounted) return;
+        setSerEsp(sres ?? []);
+        setDerivaciones(dres ?? []);
 
+        const serviciosMap = new Map<number, Servicio>();
+        (sres ?? []).forEach((se: SerEsp) => {
+          const srv = mapSerEspServiceToServicio(se);
+          serviciosMap.set(srv.id, srv);
+        });
+        (dres ?? []).forEach((dv: Deriva) => {
+          const srv = dv.servicio_deriva;
+          if (!serviciosMap.has(srv.id)) serviciosMap.set(srv.id, srv);
+        });
+        setServicios(Array.from(serviciosMap.values()));
+      } catch (e: any) {
+        console.error(e);
+        setError(
+          e?.response?.data ?? e?.message ?? "Error al cargar servicios/derivaciones"
+        );
+      }
+    }
+    load();
+    return () => {
+      mounted = false;
+    };
+  }, [efector.id]);
+
+  // -----------------------
+  // When a servicio is selected: set especialidades and efector(es)
+  // NOTE: no decidimos cupo todavía (lo hacemos al seleccionar especialidad)
+  // -----------------------
   useEffect(() => {
     if (!selectedServicio) {
       setEspecialidades([]);
       setSelectedEspecialidad(null);
-      return;
-    }
-    getEspecialidadesByServicio(selectedServicio.id)
-      .then(setEspecialidades)
-      .catch(() => setError("Error al cargar especialidades"));
-    setSelectedEfector(null);
-  }, [selectedServicio]);
-
-  useEffect(() => {
-    if (!selectedServicio || !selectedEspecialidad) {
       setEfectores([]);
       setSelectedEfector(null);
+      setCupo(false); // default
       return;
     }
-    setSelectedEfector(null);
-    getEfectoresByServEsp(selectedServicio.id, selectedEspecialidad.id)
-      .then(setEfectores)
-      .catch(() => setError("Error al cargar efectores"));
-  }, [selectedServicio, selectedEspecialidad]);
 
+    setError(null);
+    const serespEntry = serEsp.find((s) => s.id_ser === selectedServicio.id);
+
+    if (serespEntry) {
+      // Servicio proviene de SerEsp
+      const eps = (serespEntry.especialidades ?? []).map((e) =>
+        mapSerEspEspecialidadToEspecialidad({
+          id_esp: e.id_esp,
+          esp_nombre: e.esp_nombre,
+        })
+      );
+      const uniqueEps = Array.from(new Map(eps.map((x) => [x.id, x])).values());
+      setEspecialidades(uniqueEps);
+      setSelectedEspecialidad(null);
+
+      setEfectores([efector]);
+      setSelectedEfector(efector);
+
+      // si proviene de SerEsp, cupo = false (se decide sólo por derivaciones exactas)
+      setCupo(false);
+    } else {
+      // Servicio viene de derivaciones
+      const derivsForSrv = derivaciones.filter(
+        (d) => d.servicio_deriva?.id === selectedServicio.id
+      );
+
+      const epsFromDer = derivsForSrv
+        .map((d) => d.especialidad_deriva)
+        .filter(Boolean) as Especialidad[];
+
+      const uniqueEps = Array.from(
+        new Map(epsFromDer.map((x) => [x.id, x])).values()
+      );
+
+      setEspecialidades(uniqueEps);
+      setSelectedEspecialidad(null);
+
+      if (derivsForSrv.length > 0) {
+        const efDefault = derivsForSrv[0].efector_deriva;
+        setEfectores([efDefault]);
+        setSelectedEfector(efDefault);
+      } else {
+        setEfectores([]);
+        setSelectedEfector(null);
+      }
+
+      // No setear cupo aquí: lo decidimos cuando se elige la especialidad exacta
+      setCupo(false);
+    }
+  }, [selectedServicio, serEsp, derivaciones, efector, setCupo]);
+
+  // -----------------------
+  // Cuando cambia especialidad: buscamos la derivación exacta (servicio+especialidad)
+  // Si existe y cupo === 1 => setCupo(true), sino setCupo(false).
+  // -----------------------
+  useEffect(() => {
+    if (!selectedServicio || !selectedEspecialidad) return;
+
+    // si efectores ya tiene uno seleccionado, mantenerlo
+    // pero igualmente evaluamos cupo basado en la derivación exacta
+    const derivMatch = derivaciones.find(
+      (d) =>
+        d.servicio_deriva?.id === selectedServicio.id &&
+        d.especialidad_deriva?.id === selectedEspecialidad.id
+    );
+
+    if (derivMatch) {
+      // agregar efector_deriva a efectores si hace falta y setearlo
+      setEfectores((prev) =>
+        prev.some((x) => x.id === derivMatch.efector_deriva.id)
+          ? prev
+          : [...prev, derivMatch.efector_deriva]
+      );
+      setSelectedEfector(derivMatch.efector_deriva);
+
+      // ** NUEVA LÓGICA SOLICITADA **
+      // cupo = true sólo si la derivación exacta tiene cupo === 1
+      setCupo(Number(derivMatch.cupo) === 1);
+    } else {
+      // no hay derivación exacta
+      // si servicio proviene de SerEsp => cupo false
+      const serespEntry = serEsp.find((s) => s.id_ser === selectedServicio.id);
+      if (serespEntry) {
+        setCupo(false);
+      } else {
+        // servicio viene de derivaciones pero no hay deriv match (posible inconsistencia)
+        setCupo(false);
+      }
+    }
+  }, [
+    selectedServicio,
+    selectedEspecialidad,
+    derivaciones,
+    serEsp,
+    setCupo,
+  ]);
+
+  // -----------------------
+  // Confirmar selección
+  // -----------------------
   const handleConfirm = async () => {
     setError(null);
 
@@ -83,13 +237,11 @@ export default function LookEfeSerEsp({ setEfeSerEspSeleccionado, setFinishEfeSe
 
     setLoading(true);
     try {
-      // llamada a la función que pediste
       const res = await getIdByEfeSerEsp(
         selectedEfector.id,
         selectedServicio.id,
         selectedEspecialidad.id
       );
-      // setear el resultado en el padre y marcar finish
       setEfeSerEspSeleccionado(res);
       setFinishEfeSerEsp(true);
     } catch (e: any) {
@@ -106,6 +258,10 @@ export default function LookEfeSerEsp({ setEfeSerEspSeleccionado, setFinishEfeSe
     setEfeSerEspSeleccionado(null);
     setFinishEfeSerEsp(false);
     setError(null);
+    setSelectedServicio(null);
+    setSelectedEspecialidad(null);
+    setEfectores([]);
+    setCupo(false); // resetear la bandera
   };
 
   return (
@@ -137,7 +293,12 @@ export default function LookEfeSerEsp({ setEfeSerEspSeleccionado, setFinishEfeSe
         </Select>
       </FormControl>
 
-      <FormControl fullWidth size="small" sx={{ mb: 2 }} disabled={!selectedServicio}>
+      <FormControl
+        fullWidth
+        size="small"
+        sx={{ mb: 2 }}
+        disabled={!selectedServicio || especialidades.length === 0}
+      >
         <InputLabel id="especialidad-label">Especialidad</InputLabel>
         <Select
           labelId="especialidad-label"
@@ -160,7 +321,12 @@ export default function LookEfeSerEsp({ setEfeSerEspSeleccionado, setFinishEfeSe
         </Select>
       </FormControl>
 
-      <FormControl fullWidth size="small" sx={{ mb: 2 }} disabled={!selectedEspecialidad}>
+      <FormControl
+        fullWidth
+        size="small"
+        sx={{ mb: 2 }}
+        disabled={!selectedEspecialidad || efectores.length === 0}
+      >
         <InputLabel id="efector-label">Efector</InputLabel>
         <Select
           labelId="efector-label"

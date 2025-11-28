@@ -7,8 +7,8 @@ from src.views import (
     TurnoViewSet, MensajeViewSet, EfectorViewSet, EspecialidadViewSet,
     EfeSerEspPlantillaViewSet, CustomTokenObtainPairView, ServicioViwSet,
     SendWSP, TurnosMergedAllAPIView, GetEstadoMSJ, HistoricoPaciente,
-    GetPacienteAPIView, GetProfesionalAPIView,TurnoEsperaViewSet,
-    EfeSerEspViewSet, EstudioRequeridoViewSet
+    GetPacienteAPIView, GetProfesionalAPIView,TurnoEsperaViewSet, DerivaViewSet,
+    EfeSerEspViewSet, EstudioRequeridoViewSet, TurnosAlertasAPIView, GetIncorrectoAPIView
 )
 
 router = DefaultRouter()
@@ -24,11 +24,14 @@ router.register('efe_ser_esp_plantilla', EfeSerEspPlantillaViewSet, basename='ef
 router.register('turno_espera', TurnoEsperaViewSet, basename='turno_espera')
 router.register('efe_ser_esp', EfeSerEspViewSet, basename='efe_ser_esp')
 router.register('estudio_requerido', EstudioRequeridoViewSet, basename='estudio_requerido')
+router.register('derivaciones', DerivaViewSet, basename='deriva')
 
 # src/urls.py
 urlpatterns = [
     path('', include(router.urls)),
     path('turnos-merged-all-list/', TurnosMergedAllAPIView.as_view(), name='turnos-merged-all'),
+    path('turnos-merged-alerta/', TurnosAlertasAPIView.as_view(), name='turnos-merged-alerta'), 
+    path('turnos-merged-error/', GetIncorrectoAPIView.as_view(), name='turnos-merged-error'), 
     path('send_wsp/', SendWSP.as_view(), name='send_mensaje'),
     path('get_paciente/', GetPacienteAPIView.as_view(), name='get_paciente'),
     path('get_profesional/', GetProfesionalAPIView.as_view(), name='get_profesional'),

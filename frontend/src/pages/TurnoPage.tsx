@@ -7,7 +7,6 @@ import {
   CircularProgress,
   FormControlLabel,
   IconButton,
-  Menu,
   MenuItem,
   GridLegacy as Grid,
   FormControl,
@@ -27,17 +26,20 @@ import {
   Switch,
   FormGroup,
   Skeleton,
+  Pagination,
+  Stack,
+  ListItemText
 } from '@mui/material';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { motion, AnimatePresence } from 'framer-motion';
-import SearchIcon from '@mui/icons-material/Search';
 import ViewColumnIcon from '@mui/icons-material/ViewColumn';
 import GetAppIcon from '@mui/icons-material/GetApp';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
-import { getSignificado, getTurnosMergedLimit, getEstadomsj } from '../features/turno/api';
+import MenuBookIcon from '@mui/icons-material/MenuBook';
+import { getTurnosMergedLimit, getTurnosAlerta, getTurnosErrorMergedLimit } from '../features/turno/api';
 import type { TurnoExtend } from '../features/turno/types';
 import { useNavigate } from 'react-router-dom';
-import type { Efector, Especialidad, Servicio } from '../features/efe_ser_esp/types';
+import type { Efector, Servicio } from '../features/efe_ser_esp/types';
 import { AuthContext } from '../common/contex';
 import { getServicioByEfector } from '../features/efe_ser_esp/api';
 
@@ -45,65 +47,199 @@ export default function TurnosPage() {
   const [turnos, setTurnos] = useState<TurnoExtend[]>([]);
   const [loading, setLoading] = useState(false);
   const { efectores } = useContext(AuthContext) as { efectores?: Efector[] };
-  const [servicios, setServicios ] = useState<Servicio[]>([]);
-  const [selectedServicio, setSelectedServicio ] = useState<Servicio | null>(null);
-  const [especialidades, setEspecialidades ] = useState<Especialidad[]>([]);
-  const [selectedEspecialidad, setSelectedEspecialidad ] = useState<Especialidad | null>(null);
-
-  const [selectedEfector, setSelectedEfector] = useState<Efector | null>(null);
-  const [limit, setLimit] = useState<number>(10);
-  const [hasMore, setHasMore] = useState<boolean>(true);
-  const [extending, setExtending] = useState<boolean>(false);
-  const [updatingMessageId, setUpdatingMessageId] = useState<string | null>(null);
+  const [servicios, setServicios] = useState<Servicio[]>([]);
+  const [selectedEfectores, setSelectedEfectores] = useState<number[]>([]);
+  const [selectedServicios, setSelectedServicios] = useState<number[]>([]);
   // filtros / UI
-  const [dniQuery, setDniQuery] = useState('');
-  const [filterDni, setFilterDni] = useState('');
   const [anchorCols, setAnchorCols] = useState<null | HTMLElement>(null);
-  const [anchorMore, setAnchorMore] = useState<null | HTMLElement>(null);
   const [compactView, setCompactView] = useState(false);
+  const [page, setPage] = useState<number>(1);
+  const pageSize = 25; // antes limit
+  const [total, setTotal] = useState<number>(0); // total rows del servidor
+  const [fechaDesde, setFechaDesde] = useState<string | null>(null);
+  const [fechaHasta, setFechaHasta] = useState<string | null>(null);
+  const cellPadding = compactView ? '6px 8px' : '12px 16px';
+  const typographyVariant = compactView ? 'caption' : 'body2';
+  // --- Estados para alertas ---
+  const [alertData, setAlertData] = useState<null | {
+    count_total: number,
+    grupos: {
+      cancelados: TurnoExtend[],
+      incorrectos: TurnoExtend[],
+      sin_respuesta: TurnoExtend[]
+    }
+  }>(null);
+  const [alertLoading, setAlertLoading] = useState(false);
+  const [alertMode, setAlertMode] = useState(false); // cuando true mostramos turnos de alertas
+  const [activeAlertCategory, setActiveAlertCategory] = useState<
+    'cancelados' | 'incorrectos' | 'sin_respuesta'
+  >('cancelados');
 
   const navigate = useNavigate();
 
-  useEffect(() => { loadLimited(limit); /* eslint-disable-next-line */ }, []);
+  // cargar servicios cuando cambia el efector
+  async function loadServicio() {
+    if (!selectedEfectores || selectedEfectores.length === 0) {
+      setServicios([]);
+      setSelectedServicios([]); // opcional: limpiar selección de servicios si no hay efectores
+      return;
+    }
+
+    try {
+      // obtener servicios por cada efector y mezclarlos
+      const promises = selectedEfectores.map(id => getServicioByEfector(id));
+      const results = await Promise.all(promises);
+      // results es array de arrays. Unir y quitar duplicados por id
+      const merged: Record<number, Servicio> = {};
+      for (const arr of results) {
+        for (const s of arr) {
+          merged[s.id] = s;
+        }
+      }
+      const mergedList = Object.values(merged);
+      // opcional: ordenar por nombre
+      mergedList.sort((a, b) => (a.nombre ?? '').localeCompare(b.nombre ?? ''));
+      setServicios(mergedList);
+      // si seleccionaste servicios que ya no existen en merged, filtrarlos
+      setSelectedServicios(prev => prev.filter(id => merged[id] || mergedList.find(s => s.id === id)));
+    } catch (err) {
+      console.error('Error cargando servicios para efectores seleccionados', err);
+      setServicios([]);
+    }
+  }
 
   useEffect(() => {
-    const id = setTimeout(() => setFilterDni(dniQuery.trim()), 300);
-    return () => clearTimeout(id);
-  }, [dniQuery]);
+    // cuando cambia efector o servicio: resetear página y recargar
+    loadServicio();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedEfectores]);
 
-  async function loadLimited(requestLimit: number) {
-    if (!selectedEfector){
-      return 
+  // carga activa: se ejecuta cuando page o pageSize o selectedEfector cambian
+  useEffect(() => {
+    // si estamos en modo alertas no recargamos la paginación normal
+    if (!alertMode) loadPage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, pageSize]);
+
+  // ----------- loadPage actualizado -------------
+  async function loadPage() {
+    // si no hay efector seleccionado no hacemos request
+    if (selectedEfectores.length === 0) {
+      setTurnos([]);
+      setTotal(0);
+      return;
     }
+
     setLoading(true);
     try {
-      const data = await getTurnosMergedLimit(requestLimit, selectedEfector.id, selectedServicio? selectedServicio.id: null);
-      setTurnos(data);
-      setHasMore(data.length >= requestLimit);
-    } catch (e: any) { console.error(e); }
-    finally { setLoading(false); }
-  }
+      const offset = (page - 1) * pageSize;
 
-  async function loadServicio(){
-    if (!selectedEfector){
-      return
+      // Espero que getTurnosMergedLimit devuelva { response, count }
+      const data = await getTurnosMergedLimit(pageSize, offset, selectedEfectores, selectedServicios, fechaDesde, fechaHasta);
+
+      setTurnos(data.response);
+      setTotal(data.count);
+    } catch (e: any) {
+      console.error('Error cargando turnos paginados', e);
+    } finally {
+      setLoading(false);
     }
-    const data = await getServicioByEfector(selectedEfector.id)
-    setServicios(data);
+  }
+  async function loadAll() { await loadPage(); }
+
+  // ---------- Nueva función: buscar turnos con error en último mensaje ----------
+  async function handleSearchError() {
+    // No hacemos nada si no hay efectores seleccionados
+    if (!selectedEfectores || selectedEfectores.length === 0) {
+      setTurnos([]);
+      setTotal(0);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const offset = (page - 1) * pageSize;
+      // Llamamos a la función que pediste
+      const data = await getTurnosErrorMergedLimit(pageSize, offset, selectedEfectores, selectedServicios, fechaDesde, fechaHasta);
+
+      setTurnos(data.response);
+      setTotal(data.count);
+      // aseguramos salir del modo alertas si estaba activo
+      if (alertMode) setAlertMode(false);
+    } catch (err: any) {
+      console.error('Error cargando turnos con error:', err);
+      setTurnos([]);
+      setTotal(0);
+    } finally {
+      setLoading(false);
+    }
   }
 
-    useEffect(() => {
-    loadLimited(limit);
-  }, [selectedEfector, selectedServicio]);
-
+  // ---------- Alertas: fetch inicial al montar usando efectores del AuthContext ----------
   useEffect(() => {
-    setSelectedServicio(null)
-    loadServicio()
-  }, [selectedEfector])
+    const efIds = efectores?.map(e => e.id) ?? [];
+    if (efIds.length === 0) return;
 
+    (async () => {
+      setAlertLoading(true);
+      try {
+        const data = await getTurnosAlerta(efIds);
+        setAlertData(data);
+      } catch (err) {
+        console.error('Error cargando turnos alerta', err);
+        setAlertData(null);
+      } finally {
+        setAlertLoading(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [efectores]);
 
-  async function loadAll() { await loadLimited(limit); }
+  // Función que aplica (o desactiva) el modo alertas:
+  async function handleToggleAlertMode() {
+    const efIds = efectores?.map(e => e.id) ?? [];
+    if (efIds.length === 0) return;
 
+    if (!alertData) {
+      setAlertLoading(true);
+      try {
+        const data = await getTurnosAlerta(efIds);
+        setAlertData(data);
+      } catch (err) {
+        console.error('Error recargando turnos alerta', err);
+        setAlertData(null);
+      } finally {
+        setAlertLoading(false);
+      }
+    }
+
+    const next = !alertMode;
+    setAlertMode(next);
+
+    if (next) {
+      const cat = activeAlertCategory;
+      const grouped = alertData?.grupos ?? { cancelados: [], incorrectos: [], sin_respuesta: [] };
+      const newTurnos = grouped[cat] ?? [];
+      setTurnos(newTurnos);
+      setTotal(newTurnos.length);
+    } else {
+      setPage(1);
+      await loadPage();
+    }
+  }
+
+  // cuando cambio la categoria activa y estoy en alertMode, actualizo tabla
+  useEffect(() => {
+    if (!alertMode) return;
+    const cat = activeAlertCategory;
+    const grouped = alertData?.grupos ?? { cancelados: [], incorrectos: [], sin_respuesta: [] };
+    const newTurnos = grouped[cat] ?? [];
+    setTurnos(newTurnos);
+    setTotal(newTurnos.length);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeAlertCategory, alertMode]);
+
+  // ... tus funciones getMsj, getMsjReco, handleClickEstado mantienen igual ...
   function getMsj(type: number, list?: any[]): any | undefined {
     if (!Array.isArray(list) || list.length === 0) return undefined;
     for (const item of list) if (item?.plantilla?.tipo?.id === type) return item;
@@ -116,64 +252,46 @@ export default function TurnosPage() {
     return undefined;
   }
 
-  async function handleLoadMore() {
-    if (!selectedEfector){
-      return
-    }
-    const newLimit = limit + 10; setExtending(true);
-    try {
-      const data = await getTurnosMergedLimit(newLimit, selectedEfector.id, selectedServicio ? selectedServicio.id : null);
-      setTurnos(data); setLimit(newLimit); setHasMore(data.length >= newLimit);
-    } catch (e: any) { console.error(e); }
-    finally { setExtending(false); }
-  }
+  const handleChangePage = (_: React.ChangeEvent<unknown>, value: number) => {
+    setPage(value);
+  };
 
-  async function handleClickEstado(turnoIndex: number, mensajeObj?: any) {
-    if (!mensajeObj) return;
-    const pkMensaje = mensajeObj.id ?? mensajeObj.pk;
-    const idMensajeExterno = mensajeObj.id_mensaje ?? mensajeObj.id_externo ?? mensajeObj.external_id;
-    const numero = mensajeObj.numero ?? mensajeObj.telefono;
-    if (!pkMensaje || !idMensajeExterno || !numero) return console.error('Faltan datos para consultar estado del mensaje', { pkMensaje, idMensajeExterno, numero });
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-    const pkMensajeStr = String(pkMensaje);
-    try {
-      setUpdatingMessageId(pkMensajeStr);
-      const resp = await getEstadomsj(pkMensaje, idMensajeExterno, numero);
-      const data = resp?.data ?? resp;
-      if (!data || data.error) { console.error('Error en respuesta de getEstadomsj', data); return; }
+const cellSx = (maxWidth?: number | string) => ({
+    padding: cellPadding,
+    maxWidth: maxWidth ?? undefined,
+    // solo aplicar truncamiento en vista compacta
+    overflow: compactView ? 'hidden' : undefined,
+    textOverflow: compactView ? 'ellipsis' : undefined,
+    whiteSpace: compactView ? 'nowrap' : undefined,
+  });
 
-      let significado: string | undefined = mensajeObj.estado?.significado;
-      try {
-        if (data.ack != null) {
-          const sigObj = await getSignificado(data.ack);
-          significado = sigObj.significado;
-        }
-      } catch (err) { console.warn('No se pudo obtener significado para ack=', data.ack, err); significado = significado ?? (data.ack != null ? String(data.ack) : significado); }
+  // wrapper que garantiza el truncamiento visual y usa Typography dentro
+  const wrapTypography = (content: React.ReactNode) => (
+    <Box
+      component="div"
+      sx={{
+        display: 'block',
+        overflow: compactView ? 'hidden' : 'visible',
+        textOverflow: compactView ? 'ellipsis' : 'unset',
+        whiteSpace: compactView ? 'nowrap' : 'normal',
+      }}
+      title={typeof content === 'string' ? content : undefined} // tooltip nativo al pasar el mouse
+    >
+      <Typography
+        variant={typographyVariant as any}
+        // noWrap ya no es necesario porque lo maneja el contenedor
+        sx={{ lineHeight: 1.1, fontSize: compactView ? '0.72rem' : undefined, display: 'inline-block' }}
+      >
+        {content}
+      </Typography>
+    </Box>
+  );
 
-      const nuevoMensaje = {
-        ...mensajeObj,
-        estado: { ...(mensajeObj.estado ?? {}), id: data.ack ?? mensajeObj.estado?.id, significado },
-        fecha_envio: data.time ?? data.fecha_last_ack ?? mensajeObj.fecha_envio,
-      };
-
-      setTurnos(prev => {
-        if (turnoIndex < 0 || turnoIndex >= prev.length) return prev;
-        const nuevosTurnos = prev.map((t, i) => {
-          if (i !== turnoIndex) return t;
-          const mensajes = Array.isArray(t.mensaje_asociado) ? [...t.mensaje_asociado] : [];
-          const idx = mensajes.findIndex((m: any) => String(m.id ?? m.pk) === pkMensajeStr);
-          if (idx >= 0) mensajes[idx] = nuevoMensaje; else mensajes.push(nuevoMensaje);
-          return { ...t, mensaje_asociado: mensajes };
-        });
-        return nuevosTurnos;
-      });
-
-    } catch (e: any) { console.error('Error consultando estado del mensaje', e); }
-    finally { setUpdatingMessageId(null); }
-  }
-
-  // ---- columnas ----
+  // ---- columnas y resto del render sin cambios ----
   const allColumns = useMemo(() => [
+    { key: 'respuesta', label: 'Respuesta' },
     { key: 'dni', label: 'DNI' },
     { key: 'nombre', label: 'Nombre' },
     { key: 'apellido', label: 'Apellido' },
@@ -207,22 +325,17 @@ export default function TurnosPage() {
 
   const visibleKeys = allColumns.filter(c => visibleColumns[c.key]).map(c => c.key);
   const visibleCount = Math.max(1, visibleKeys.length);
-  // ancho mínimo dinámico para la tabla (más agresivo para vista compacta)
   const tableMinWidth = useMemo(() => Math.max(visibleCount * 110, 700), [visibleCount]);
 
-  // ---- filtrado por DNI (aplicado con filtro debounced) ----
-  const filteredTurnos = useMemo(() => {
-    if (!filterDni) return turnos;
-    return turnos.filter(t => String(t.paciente_dni ?? '').includes(filterDni));
-  }, [turnos, filterDni]);
 
   function downloadCSV() {
     const headers = allColumns.filter(c => visibleColumns[c.key]).map(c => c.label);
-    const rows = filteredTurnos.map(t => {
+    const rows = turnos.map(t => {
       const row: any[] = [];
       for (const c of allColumns) {
         if (!visibleColumns[c.key]) continue;
         switch (c.key) {
+          case 'respuesta': row.push(t.estado_paciente?.nombre ?? ''); break;
           case 'dni': row.push(t.paciente_dni ?? ''); break;
           case 'nombre': row.push(t.paciente_nombre ?? ''); break;
           case 'apellido': row.push(t.paciente_apellido ?? ''); break;
@@ -244,10 +357,14 @@ export default function TurnosPage() {
       return row;
     });
 
-    const csv = [headers, ...rows].map(r => r.map(cell => `"${String(cell).replace(/"/g,'""')}"`).join(',')).join('\n');
+    const csv = [headers, ...rows].map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url;
-    a.download = `turnos_${new Date().toISOString()}.csv`; a.click(); URL.revokeObjectURL(url);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `turnos_${new Date().toISOString()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   function estadoChipLabel(t: TurnoExtend) {
@@ -255,58 +372,77 @@ export default function TurnosPage() {
     return nombre;
   }
 
-  function estadoChipColor(t: TurnoExtend) {
-    const n = t.estado.nombre 
-    if (n == 'ASIGNADO') return 'success';
-    if (n == 'CANCELADO') return 'error';
-    if (n == 'REPROGRAMADO') return 'warning';
-    if (n == 'FINALIZADO') return 'info'
+  function estadoRespChipLabel(t: TurnoExtend) {
+    const nombre = t.estado_paciente?.nombre ?? '—';
+    return nombre;
+  }
+
+  function estadoRespChipColor(t: TurnoExtend) {
+    const n = t.estado_paciente?.nombre ?? '';
+    if (n === 'SIN DATOS') return 'info';
+    if (n === 'CONFIRMADO') return 'success';
+    if (n === 'CANCELADO') return 'error';
+    if (n === 'PERSONA INCORRECTA') return 'warning';
+    if (n === 'SIN RESPUESTA') return 'warning';
     return 'default';
   }
 
-  // render cell (con ajustes para vista compacta)
-  function renderCell(columnKey: string, t: TurnoExtend, idx: number) {
-    const cellPadding = compactView ? '6px 8px' : '12px 16px';
-    const typographyVariant = compactView ? 'caption' : 'body2';
+  function estadoChipColor(t: TurnoExtend) {
+    const n = t.estado?.nombre ?? '';
+    if (n === 'ASIGNADO') return 'success';
+    if (n === 'SUSPENDIDO') return 'error';
+    if (n === 'REPROGRAMADO') return 'warning';
+    if (n === 'FINALIZADO') return 'info';
+    return 'default';
+  }
 
-    const wrapTypography = (content: React.ReactNode) => (
-      <Typography
-        variant={typographyVariant as any}
-        noWrap={compactView}
-        sx={{ lineHeight: 1.1, fontSize: compactView ? '0.72rem' : undefined }}
-      >
-        {content}
-      </Typography>
-    );
-
+  function renderCell(columnKey: string, t: TurnoExtend) {
     switch (columnKey) {
-      case 'dni': return <TableCell key={columnKey} sx={{ padding: cellPadding, maxWidth: 140 }}>{wrapTypography(t.paciente_dni ?? '—')}</TableCell>;
-      case 'nombre': return <TableCell key={columnKey} sx={{ padding: cellPadding, maxWidth: 160 }}>{wrapTypography(t.paciente_nombre ?? '—')}</TableCell>;
-      case 'apellido': return <TableCell key={columnKey} sx={{ padding: cellPadding, maxWidth: 160 }}>{wrapTypography(t.paciente_apellido ?? '—')}</TableCell>;
-      case 'efector': return <TableCell key={columnKey} sx={{ padding: cellPadding, maxWidth: 200 }}>{wrapTypography(t.efe_ser_esp.efector?.nombre ?? String(t.efe_ser_esp.efector.id ?? '—'))}</TableCell>;
-      case 'servicio': return <TableCell key={columnKey} sx={{ padding: cellPadding, maxWidth: 180 }}>{wrapTypography(t.efe_ser_esp.servicio?.nombre ?? String(t.efe_ser_esp.servicio.id ?? '—'))}</TableCell>;
-      case 'especialidad': return <TableCell key={columnKey} sx={{ padding: cellPadding, maxWidth: 180 }}>{wrapTypography(t.efe_ser_esp.especialidad?.nombre ?? String(t.efe_ser_esp.especialidad.id ?? '—'))}</TableCell>;
-      case 'prof_nombre': return <TableCell key={columnKey} sx={{ padding: cellPadding, maxWidth: 160 }}>{wrapTypography(t.profesional_nombre ?? '—')}</TableCell>;
-      case 'prof_apellido': return <TableCell key={columnKey} sx={{ padding: cellPadding, maxWidth: 160 }}>{wrapTypography(t.profesional_apellido ?? '—')}</TableCell>;
-      case 'estado': return (
-        <TableCell key={columnKey} sx={{ padding: cellPadding, maxWidth: 160 }}>
-          <Chip size="small" label={estadoChipLabel(t)} color={estadoChipColor(t) as any} variant="outlined" />
-        </TableCell>
-      );
+      case 'respuesta':
+        return (
+          <TableCell key={columnKey} sx={cellSx(160)}>
+            <Chip size="small" label={estadoRespChipLabel(t)} color={estadoRespChipColor(t) as any} variant="outlined" />
+          </TableCell>
+        );
+      case 'dni':
+        return <TableCell key={columnKey} sx={cellSx(140)}>{wrapTypography(t.paciente_dni ?? '—')}</TableCell>;
+      case 'nombre':
+        return <TableCell key={columnKey} sx={cellSx(160)}>{wrapTypography(t.paciente_nombre ?? '—')}</TableCell>;
+      case 'apellido':
+        return <TableCell key={columnKey} sx={cellSx(160)}>{wrapTypography(t.paciente_apellido ?? '—')}</TableCell>;
+      case 'efector':
+        return <TableCell key={columnKey} sx={cellSx(200)}>{wrapTypography(t.efe_ser_esp.efector?.nombre ?? String(t.efe_ser_esp.efector.id ?? '—'))}</TableCell>;
+      case 'servicio':
+        return <TableCell key={columnKey} sx={cellSx(180)}>{wrapTypography(t.efe_ser_esp.servicio?.nombre ?? String(t.efe_ser_esp.servicio.id ?? '—'))}</TableCell>;
+      case 'especialidad':
+        return <TableCell key={columnKey} sx={cellSx(180)}>{wrapTypography(t.efe_ser_esp.especialidad?.nombre ?? String(t.efe_ser_esp.especialidad.id ?? '—'))}</TableCell>;
+      case 'prof_nombre':
+        return <TableCell key={columnKey} sx={cellSx(160)}>{wrapTypography(t.profesional_nombre ?? '—')}</TableCell>;
+      case 'prof_apellido':
+        return <TableCell key={columnKey} sx={cellSx(160)}>{wrapTypography(t.profesional_apellido ?? '—')}</TableCell>;
+      case 'estado':
+        return (
+          <TableCell key={columnKey} sx={cellSx(160)}>
+            <Chip size="small" label={estadoChipLabel(t)} color={estadoChipColor(t) as any} variant="outlined" />
+          </TableCell>
+        );
 
       case 'confirmacion': {
         const mensaje = getMsj(1, t.mensaje_asociado);
         const tooltipTitle = mensaje?.plantilla?.contenido ? (<span style={{ whiteSpace: 'pre-wrap' }}>{mensaje.plantilla.contenido}</span>) : '';
         return (
-          <TableCell key={columnKey} sx={{ padding: cellPadding, maxWidth: 220 }}>
+          <TableCell key={columnKey} sx={cellSx(220)}>
             {mensaje ? (
-              <Tooltip title={tooltipTitle} arrow placement="top" enterDelay={150}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Button size="small" variant="text" onClick={() => handleClickEstado(idx, mensaje)} disabled={updatingMessageId === (String(mensaje.id ?? mensaje.pk))}>
-                    {updatingMessageId === (String(mensaje.id ?? mensaje.pk)) ? <CircularProgress size={14} /> : (mensaje.estado?.significado ?? '—')}
-                  </Button>
-                  {mensaje?.fecha_envio ? <Typography variant="caption" noWrap>{mensaje.fecha_envio}</Typography> : null}
-                </div>
+              <Tooltip
+                title={tooltipTitle}
+                arrow
+                placement="top"
+                enterDelay={150}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  {wrapTypography(mensaje.estado?.significado ?? '—')}
+                  {mensaje?.fecha_envio ? <Typography variant="caption" sx={{ ml: 0.5, flexShrink: 0 }}>{mensaje.fecha_envio}</Typography> : null}
+                </Box>
               </Tooltip>
             ) : '—'}
           </TableCell>
@@ -317,15 +453,13 @@ export default function TurnosPage() {
         const mensaje = getMsj(2, t.mensaje_asociado);
         const tooltipTitle = mensaje?.plantilla?.contenido ? (<span style={{ whiteSpace: 'pre-wrap' }}>{mensaje.plantilla.contenido}</span>) : '';
         return (
-          <TableCell key={columnKey} sx={{ padding: cellPadding, maxWidth: 220 }}>
+          <TableCell key={columnKey} sx={cellSx(220)}>
             {mensaje ? (
               <Tooltip title={tooltipTitle} arrow placement="top" enterDelay={150}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Button size="small" variant="text" onClick={() => handleClickEstado(idx, mensaje)} disabled={updatingMessageId === (String(mensaje.id ?? mensaje.pk))}>
-                    {updatingMessageId === (String(mensaje.id ?? mensaje.pk)) ? <CircularProgress size={14} /> : (mensaje.estado?.significado ?? '—')}
-                  </Button>
-                  {mensaje?.fecha_envio ? <Typography variant="caption" noWrap>{mensaje.fecha_envio}</Typography> : null}
-                </div>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  {wrapTypography(mensaje.estado?.significado ?? '—')}
+                  {mensaje?.fecha_envio ? <Typography variant="caption" sx={{ ml: 0.5, flexShrink: 0 }}>{mensaje.fecha_envio}</Typography> : null}
+                </Box>
               </Tooltip>
             ) : '—'}
           </TableCell>
@@ -336,15 +470,13 @@ export default function TurnosPage() {
         const mensaje = getMsj(3, t.mensaje_asociado);
         const tooltipTitle = mensaje?.plantilla?.contenido ? (<span style={{ whiteSpace: 'pre-wrap' }}>{mensaje.plantilla.contenido}</span>) : '';
         return (
-          <TableCell key={columnKey} sx={{ padding: cellPadding, maxWidth: 220 }}>
+          <TableCell key={columnKey} sx={cellSx(220)}>
             {mensaje ? (
               <Tooltip title={tooltipTitle} arrow placement="top" enterDelay={150}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Button size="small" variant="text" onClick={() => handleClickEstado(idx, mensaje)} disabled={updatingMessageId === (String(mensaje.id ?? mensaje.pk))}>
-                    {updatingMessageId === (String(mensaje.id ?? mensaje.pk)) ? <CircularProgress size={14} /> : (mensaje.estado?.significado ?? '—')}
-                  </Button>
-                  {mensaje?.fecha_envio ? <Typography variant="caption" noWrap>{mensaje.fecha_envio}</Typography> : null}
-                </div>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  {wrapTypography(mensaje.estado?.significado ?? '—')}
+                  {mensaje?.fecha_envio ? <Typography variant="caption" sx={{ ml: 0.5, flexShrink: 0 }}>{mensaje.fecha_envio}</Typography> : null}
+                </Box>
               </Tooltip>
             ) : '—'}
           </TableCell>
@@ -355,114 +487,220 @@ export default function TurnosPage() {
         const mensaje_reco = getMsjReco(t.mensaje_asociado);
         const tooltipTitle = mensaje_reco?.plantilla?.contenido ? (<span style={{ whiteSpace: 'pre-wrap' }}>{mensaje_reco.plantilla.contenido}</span>) : '';
         return (
-          <TableCell key={columnKey} sx={{ padding: cellPadding, maxWidth: 220 }}>
+          <TableCell key={columnKey} sx={cellSx(220)}>
             {mensaje_reco ? (
               <Tooltip title={tooltipTitle} arrow placement="top" enterDelay={150}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Button size="small" variant="text" onClick={() => handleClickEstado(idx, mensaje_reco)} disabled={updatingMessageId === (String(mensaje_reco.id ?? mensaje_reco.pk))}>
-                    {updatingMessageId === (String(mensaje_reco.id ?? mensaje_reco.pk)) ? <CircularProgress size={14} /> : (mensaje_reco.estado?.significado ?? '—')}
-                  </Button>
-                  {mensaje_reco?.fecha_envio ? <Typography variant="caption" noWrap>{mensaje_reco.fecha_envio}</Typography> : null}
-                </div>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  {wrapTypography(mensaje_reco.estado?.significado ?? '—')}
+                  {mensaje_reco?.fecha_envio ? <Typography variant="caption" sx={{ ml: 0.5, flexShrink: 0 }}>{mensaje_reco.fecha_envio}</Typography> : null}
+                </Box>
               </Tooltip>
             ) : '—'}
           </TableCell>
         );
       }
 
-      case 'fecha': return <TableCell key={columnKey} sx={{ padding: cellPadding, maxWidth: 120 }}>{wrapTypography(t.fecha ?? '—')}</TableCell>;
-      case 'hora': return <TableCell key={columnKey} sx={{ padding: cellPadding, maxWidth: 90 }}>{wrapTypography(t.hora ?? '—')}</TableCell>;
-      default: return <TableCell key={columnKey} sx={{ padding: cellPadding }}>—</TableCell>;
+      case 'fecha':
+        return <TableCell key={columnKey} sx={cellSx(120)}>{wrapTypography(t.fecha ?? '—')}</TableCell>;
+      case 'hora':
+        return <TableCell key={columnKey} sx={cellSx(90)}>{wrapTypography(t.hora ?? '—')}</TableCell>;
+      default:
+        return <TableCell key={columnKey} sx={cellSx()}>{wrapTypography('—')}</TableCell>;
     }
   }
-  (turnos)
+
   return (
     <Box sx={{ p: 2 }}>
-      {/* header */}
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, gap: 1 }}>
-        <Box>
-          <Typography variant={compactView ? 'h6' : 'h5'} fontWeight={700}>Turnos</Typography>
+      {/* ALERTAS: arriba de todo */}
+      <Paper elevation={3} sx={{ p: 1, mb: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <WarningAmberIcon sx={{ color: 'warning.main' }} />
+          <Typography fontWeight={700}>Alerta</Typography>
+          <Typography variant="caption" sx={{ ml: 1 }}>
+            {alertLoading ? 'cargando...' : alertData ? `${alertData.count_total} turnos en total` : '—'}
+          </Typography>
         </Box>
-<Box sx={{ p: 2 }}>
-    <Grid item xs={12} sm={4} md={3}>
-              <FormControl size="small" fullWidth>
-                <InputLabel id="efector-select-label">Efector</InputLabel>
-                <Select
-                  labelId="efector-select-label"
-                  value={selectedEfector?.id ?? ""}
-                  label="Efector"
-                  onChange={(e) => {
-                    const id = Number(e.target.value);
-                    const ef = efectores?.find((x) => x.id === id) ?? null;
-                    setSelectedEfector(ef);
-                  }}
-                >
-                  {efectores && efectores.length > 0 ? (
-                    efectores.map((ef) => (
-                      <MenuItem key={ef.id} value={ef.id}>
-                        {ef.nombre ?? `Efector ${ef.id}`}
-                      </MenuItem>
-                    ))
-                  ) : (
-                    <MenuItem value="">(sin efectores)</MenuItem>
-                  )}
-                </Select>
-              </FormControl>
-            </Grid>
-          
-          <Grid item xs={12} sm={4} md={3}>
-              <FormControl size="small" fullWidth>
-                <InputLabel id="servicio-select-label">Servicio</InputLabel>
-                <Select
-                  labelId="efector-select-label"
-                  value={selectedServicio?.id ?? ""}
-                  label="Servicio"
-                  onChange={(e) => {
-                    const id = Number(e.target.value);
-                    const se = servicios?.find((x) => x.id === id) ?? null;
-                    setSelectedServicio(se);
-                  }}
-                >
-                  {servicios && servicios.length > 0 ? (
-                    servicios.map((se) => (
-                      <MenuItem key={se.id} value={se.id}>
-                        {se.nombre ?? `Servicio ${se.id}`}
-                      </MenuItem>
-                    ))
-                  ) : (
-                    <MenuItem value="">(sin servicios)</MenuItem>
-                  )}
-                </Select>
-              </FormControl>
-            </Grid>
 
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Box sx={{ display: 'flex', gap: 0.5 }}>
+            <Button
+              size="small"
+              variant={activeAlertCategory === 'cancelados' ? 'contained' : 'outlined'}
+              onClick={() => setActiveAlertCategory('cancelados')}
+            >
+              CANCELADOS {alertData ? `(${alertData.grupos.cancelados.length})` : ''}
+            </Button>
+            <Button
+              size="small"
+              variant={activeAlertCategory === 'incorrectos' ? 'contained' : 'outlined'}
+              onClick={() => setActiveAlertCategory('incorrectos')}
+            >
+              INCORRECTOS {alertData ? `(${alertData.grupos.incorrectos.length})` : ''}
+            </Button>
+            <Button
+              size="small"
+              variant={activeAlertCategory === 'sin_respuesta' ? 'contained' : 'outlined'}
+              onClick={() => setActiveAlertCategory('sin_respuesta')}
+            >
+              SIN RESPUESTA {alertData ? `(${alertData.grupos.sin_respuesta.length})` : ''}
+            </Button>
+          </Box>
 
-        
-        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-          <TextField
+          <Button
+            startIcon={<WarningAmberIcon />}
+            color={alertMode ? 'warning' : 'inherit'}
+            variant={alertMode ? 'contained' : 'outlined'}
+            onClick={handleToggleAlertMode}
+            disabled={alertLoading || !(efectores && efectores.length > 0)}
             size="small"
-            placeholder="Filtrar por DNI..."
-            value={dniQuery}
-            onChange={(e) => setDniQuery(e.target.value)}
-            InputProps={{ startAdornment: <SearchIcon sx={{ mr: 1 }} /> }}
-            sx={{ width: compactView ? 180 : 220 }}
-          />
-
-          <Button startIcon={<RefreshIcon />} variant="outlined" onClick={loadAll} disabled={loading} size="small">
-            {loading ? <CircularProgress size={18} /> : 'Refrescar'}
+          >
+            {alertLoading ? <CircularProgress size={18} /> : `ALERTA ${alertData ? `(${alertData.count_total})` : ''}`}
           </Button>
-
-          <Button startIcon={<GetAppIcon />} variant="contained" onClick={downloadCSV} disabled={loading || !filteredTurnos.length} size="small">Descargar</Button>
-
-          <IconButton onClick={(e) => setAnchorCols(e.currentTarget)} size="small" title="Columnas">
-            <ViewColumnIcon fontSize="small" />
-          </IconButton>
-
-          <IconButton onClick={(e) => setAnchorMore(e.currentTarget)} size="small" title="Más">
-            <MoreVertIcon fontSize="small" />
-          </IconButton>
         </Box>
-      </Box>
+      </Paper>
+
+      {/* FILTROS: debajo de las alertas, bien distribuidos */}
+      <Paper elevation={1} sx={{ p: 2, mb: 2 }}>
+        <Grid container spacing={2} alignItems="center">
+          {/* EFECTORES */}
+          <Grid item xs={12} md={4}>
+            <FormControl
+              size="small"
+              fullWidth
+              sx={{ minWidth: 260, maxWidth: 520 }} // <- tamaño fijo razonable
+            >
+              <InputLabel id="efector-select-label">Efector</InputLabel>
+              <Select
+                labelId="efector-select-label"
+                multiple
+                value={selectedEfectores}
+                label="Efector"
+                onChange={(e) => {
+                  const ids = e.target.value as number[];
+                  setSelectedEfectores(ids);
+                }}
+                renderValue={(selected) => {
+                  const ids = selected as number[];
+                  return ids.map(id => efectores?.find(x => x.id === id)?.nombre ?? String(id)).join(', ');
+                }}
+                // fuerza tamaño mínimo visual del control
+                sx={{ minWidth: 240 }}
+                MenuProps={{ PaperProps: { style: { maxHeight: 320 } } }}
+              >
+                {efectores && efectores.length > 0 ? (
+                  efectores.map((ef) => (
+                    <MenuItem key={ef.id} value={ef.id}>
+                      <Checkbox checked={selectedEfectores.indexOf(ef.id) > -1} />
+                      <ListItemText primary={ef.nombre ?? `Efector ${ef.id}`} />
+                    </MenuItem>
+                  ))
+                ) : (
+                  <MenuItem value="">(sin efectores)</MenuItem>
+                )}
+              </Select>
+            </FormControl>
+          </Grid>
+
+          {/* SERVICIOS */}
+          <Grid item xs={12} md={4}>
+            <FormControl
+              size="small"
+              fullWidth
+              sx={{ minWidth: 260, maxWidth: 520 }} // <- mismo tamaño que efector para consistencia
+            >
+              <InputLabel id="servicio-select-label">Servicio</InputLabel>
+              <Select
+                labelId="servicio-select-label"
+                multiple
+                value={selectedServicios}
+                label="Servicio"
+                onChange={(e) => {
+                  const ids = e.target.value as number[];
+                  setSelectedServicios(ids);
+                }}
+                renderValue={(selected) => {
+                  const ids = selected as number[];
+                  return ids.map(id => servicios?.find(x => x.id === id)?.nombre ?? String(id)).join(', ');
+                }}
+                sx={{ minWidth: 240 }}
+                MenuProps={{ PaperProps: { style: { maxHeight: 320 } } }}
+              >
+                {servicios && servicios.length > 0 ? (
+                  servicios.map((se) => (
+                    <MenuItem key={se.id} value={se.id}>
+                      <Checkbox checked={selectedServicios.indexOf(se.id) > -1} />
+                      <ListItemText primary={se.nombre ?? `Servicio ${se.id}`} />
+                    </MenuItem>
+                  ))
+                ) : (
+                  <MenuItem value="">(sin servicios)</MenuItem>
+                )}
+              </Select>
+            </FormControl>
+          </Grid>
+
+          {/* RANGO FECHAS */}
+          <Grid item xs={12} md={2}>
+            <TextField
+              size="small"
+              label="Desde"
+              type="date"
+              InputLabelProps={{ shrink: true }}
+              value={fechaDesde ?? ''}
+              onChange={(e) => setFechaDesde(e.target.value ? e.target.value : null)}
+              fullWidth
+            />
+          </Grid>
+          <Grid item xs={12} md={2}>
+            <TextField
+              size="small"
+              label="Hasta"
+              type="date"
+              InputLabelProps={{ shrink: true }}
+              value={fechaHasta ?? ''}
+              onChange={(e) => setFechaHasta(e.target.value ? e.target.value : null)}
+              fullWidth
+            />
+          </Grid>
+
+          {/* BOTONES ACCION */}
+          <Grid item xs={12} md={6}>
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+              <Button startIcon={<RefreshIcon />} variant="outlined" onClick={loadAll} disabled={loading || selectedEfectores?.length === 0} size="small">
+                {loading ? <CircularProgress size={18} /> : 'Buscar'}
+              </Button>
+
+              <Button
+                startIcon={<WarningAmberIcon />}
+                variant="outlined"
+                onClick={handleSearchError}
+                disabled={loading || selectedEfectores?.length === 0}
+                size="small"
+                title="Buscar turnos con mensajes en error (último mensaje id_estado <= 0)"
+              >
+                Error mensajes
+              </Button>
+
+              <Button startIcon={<GetAppIcon />} variant="contained" onClick={downloadCSV} disabled={loading || !turnos.length} size="small">Descargar</Button>
+
+              <IconButton onClick={(e) => setAnchorCols(e.currentTarget)} size="small" title="Columnas">
+                <ViewColumnIcon fontSize="small" />
+              </IconButton>
+
+              <IconButton onClick={(_) => navigate('/historico')} size="small" title="Histrico">
+                <MenuBookIcon fontSize="small" />
+              </IconButton>
+            </Box>
+          </Grid>
+
+          {/* ESPACIO PARA AJUSTES (compact view, etc) */}
+          <Grid item xs={12} md={6}>
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+              <FormControlLabel control={<Switch checked={compactView} onChange={() => setCompactView(v => !v)} />} label="Vista compacta" />
+            </Box>
+          </Grid>
+        </Grid>
+      </Paper>
 
       {/* controles de columnas (popover) */}
       <Popover open={Boolean(anchorCols)} anchorEl={anchorCols} onClose={() => setAnchorCols(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
@@ -485,43 +723,56 @@ export default function TurnosPage() {
         </Box>
       </Popover>
 
-      <Menu anchorEl={anchorMore} open={Boolean(anchorMore)} onClose={() => setAnchorMore(null)}>
-        <MenuItem onClick={() => { setCompactView(v => !v); setAnchorMore(null); }}>
-          <FormControlLabel control={<Switch checked={compactView} onChange={() => {}} />} label="Vista compacta" />
-        </MenuItem>
-        <MenuItem onClick={() => navigate('/historico')}>Ir a histórico</MenuItem>
-      </Menu>
-      </Box>
+
       {/* tabla */}
       <TableContainer component={Paper} elevation={4} sx={{ borderRadius: 2, overflowX: 'auto', mt: 1, maxHeight: compactView ? 620 : undefined }}>
         <Table stickyHeader size="small" sx={{ minWidth: tableMinWidth }}>
-          <TableHead>
-            <TableRow sx={{ background: (theme) => theme.palette.background.paper }}>
-              {allColumns.filter(c => visibleColumns[c.key]).map(col => (
-                <TableCell key={col.key} sx={{ fontWeight: 700, padding: compactView ? '6px 8px' : '12px 16px' }}>{col.label}</TableCell>
-              ))}
-            </TableRow>
-          </TableHead>
+        <TableHead>
+          <TableRow sx={{ background: (theme) => theme.palette.background.paper }}>
+            {allColumns.filter(c => visibleColumns[c.key]).map(col => (
+              <TableCell
+                key={col.key}
+                sx={{
+                  fontWeight: 700,
+                  padding: compactView ? '6px 8px' : '12px 16px',
+                  overflow: compactView ? 'hidden' : undefined,
+                  textOverflow: compactView ? 'ellipsis' : undefined,
+                  whiteSpace: compactView ? 'nowrap' : undefined,
+                  maxWidth: 200
+                }}
+              >
+                {col.label}
+              </TableCell>
+            ))}
+          </TableRow>
+        </TableHead>
+
+
 
           <TableBody>
-            {loading && (
-              Array.from({ length: 6 }).map((_, i) => (
-                <TableRow key={`skel-${i}`}>
-                  {allColumns.filter(c => visibleColumns[c.key]).map((_, j) => (
-                    <TableCell key={j} sx={{ padding: compactView ? '6px 8px' : '12px 16px' }}><Skeleton variant="text" /></TableCell>
-                  ))}
-                </TableRow>
-              ))
-            )}
+          {loading && (
+            Array.from({ length: 6 }).map((_, i) => (
+              <TableRow key={`skel-${i}`}>
+                {allColumns.filter(c => visibleColumns[c.key]).map((_, j) => (
+                  <TableCell key={j} sx={{ padding: compactView ? '6px 8px' : '12px 16px' }}>
+                    <Skeleton variant="text" />
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))
+          )}
 
-            {!loading && !filteredTurnos.length && (
+
+            {!loading && !turnos.length && (
               <TableRow>
-                <TableCell colSpan={visibleCount}><Box sx={{ p: 3, textAlign: 'center' }}><Typography>No hay turnos para mostrar.</Typography></Box></TableCell>
+                <TableCell colSpan={visibleCount + 1}>
+                  <Box sx={{ p: 3, textAlign: 'center' }}><Typography>No hay turnos para mostrar.</Typography></Box>
+                </TableCell>
               </TableRow>
             )}
 
             <AnimatePresence initial={false} mode="popLayout">
-              {!loading && filteredTurnos.map((t, idx) => (
+              {!loading && turnos.map((t, idx) => (
                 <TableRow
                   key={t.id ?? idx}
                   component={motion.tr}
@@ -531,7 +782,8 @@ export default function TurnosPage() {
                   transition={{ duration: 0.22 }}
                   sx={{ '&:hover': { boxShadow: 3 }, cursor: 'default' }}
                 >
-                  {allColumns.filter(c => visibleColumns[c.key]).map(col => renderCell(col.key, t, idx))}
+
+                  {allColumns.filter(c => visibleColumns[c.key]).map(col => renderCell(col.key, t))}
                 </TableRow>
               ))}
             </AnimatePresence>
@@ -542,10 +794,18 @@ export default function TurnosPage() {
 
       {/* footer */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1 }}>
-        <Typography variant="caption">Mostrando {filteredTurnos.length} turnos. (límite: {limit})</Typography>
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <Button variant="outlined" onClick={handleLoadMore} disabled={extending || loading || !hasMore} size="small">{extending ? <CircularProgress size={18} /> : (hasMore ? 'Mostrar más' : 'No hay más')}</Button>
-        </Box>
+        <Stack direction="row" spacing={2} alignItems="center">
+          <Pagination
+            count={totalPages}
+            page={page}
+            onChange={handleChangePage}
+            color="primary"
+            siblingCount={1}
+            boundaryCount={1}
+            showFirstButton
+            showLastButton
+          />
+        </Stack>
       </Box>
     </Box>
   );

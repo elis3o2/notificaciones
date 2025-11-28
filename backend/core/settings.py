@@ -24,8 +24,9 @@ USE_TZ = False
 TIME_ZONE = "America/Argentina/Buenos_Aires"
 CELERY_TIMEZONE = "America/Argentina/Buenos_Aires"
 
-DEBUG = False
-ALLOWED_HOSTS =config('ALLOWED_HOSTS', cast=Csv()) #["*"]
+DEBUG = True
+#ALLOWED_HOSTS =config('ALLOWED_HOSTS', cast=Csv()) #["*"]
+ALLOWED_HOSTS = ["*"]
 CORS_ALLOW_ALL_ORIGINS = True
 #CORS_ALLOW_CREDENTIALS = True
 #CORS_ALLOWED_ORIGINS = config('CORS_ORIGIN', cast=Csv())
@@ -117,15 +118,21 @@ LANGUAGE_CODE = 'en-us'
 USE_I18N = True
 
 
-
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-    ),
+    'DEFAULT_AUTHENTICATION_CLASSES': (),  # Sin autenticación
     'DEFAULT_PERMISSION_CLASSES': (
-        'rest_framework.permissions.IsAuthenticated',
+        'rest_framework.permissions.AllowAny',
     ),
 }
+
+#REST_FRAMEWORK = {
+#    'DEFAULT_AUTHENTICATION_CLASSES': (
+#        'rest_framework_simplejwt.authentication.JWTAuthentication',
+#    ),
+#    'DEFAULT_PERMISSION_CLASSES': (
+#        'rest_framework.permissions.IsAuthenticated',
+#    ),
+#}
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
@@ -150,7 +157,7 @@ CELERY_BEAT_SCHEDULE = {
     },
     "recordatorios-diarios": {
         "task": "src.tasks.programar_recordatorios",  # ruta completa a la tarea
-        "schedule": crontab(hour=12, minute=48),
+        "schedule": crontab(hour=10, minute=10),
     },
 }
 

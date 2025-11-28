@@ -1,5 +1,4 @@
 import http from '../../common/api/client'
-import type { Efector } from '../efe_ser_esp/types';
 import type { Turno, TurnoEspera, TurnoExtend, EstadoMsj, EstudioRequerido } from './types';
 
 export const getTurnosAll = (
@@ -93,11 +92,11 @@ export const getTurnosByCombinations = async (
 
 
 // Obtener todos los turnos con un límite de cantidad
-export const getTurnosMergedLimit = (cantidad: number, efector: number, servicio: number | null): Promise<TurnoExtend[]> => {
-  if (cantidad <= 0) return Promise.resolve([]);
+export const getTurnosMergedLimit = (cantidad: number, offset:number, efectores: number[], servicios: number[], fechaDesde: string | null, fechaHasta: string| null ): Promise<{response: TurnoExtend[], count:number}> => {
+  if (cantidad <= 0) return Promise.resolve({response:[], count:0});
   const url = '/turnos-merged-all-list/';
   return http
-    .get<TurnoExtend[]>(url, { params: { cantidad, efector, servicio } })
+    .get<{response: TurnoExtend[], count:number}>(url, { params: { cantidad, offset, efectores, servicios, fechaDesde, fechaHasta } })
     .then(res => res.data);
 };
 
@@ -110,6 +109,43 @@ export const getTurnosMergedAll = (ids?: Array<string | number>): Promise<TurnoE
   const idsCsv = ids.map(String).map(encodeURIComponent).join(',');
   return http.get<TurnoExtend[]>(url, { params: { ids: idsCsv } }).then(res => res.data);
 };
+
+
+// Obtener todos los turnos con un límite de cantidad
+export const getTurnosErrorMergedLimit = (cantidad: number, offset:number, efectores: number[], servicios: number[], fechaDesde: string | null, fechaHasta: string| null ): Promise<{response: TurnoExtend[], count:number}> => {
+  if (cantidad <= 0) return Promise.resolve({response:[], count:0});
+  const url = '/turnos-merged-error/';
+  return http
+    .get<{response: TurnoExtend[], count:number}>(url, { params: { cantidad, offset, efectores, servicios, fechaDesde, fechaHasta } })
+    .then(res => res.data);
+};
+
+
+
+
+export interface TurnosAlertaResponse {
+    count_total: number;
+    grupos: {
+        incorrectos: TurnoExtend[];
+        cancelados: TurnoExtend[];
+        sin_respuesta: TurnoExtend[];
+    }
+}
+
+export const getTurnosAlerta = (
+  ids: Array<string | number>
+): Promise<TurnosAlertaResponse> => {
+  const url = '/turnos-merged-alerta/';
+
+  return http.get<TurnosAlertaResponse>(url, {
+    params: {
+      'efectores[]': ids   // <<< esto genera efectores[]=1&efectores[]=2
+    }
+  }).then(res => res.data);
+};
+
+
+
 
 export const getTurnosByIds = (ids: Array<string | number>): Promise<TurnoExtend[]> => {
   return getTurnosMergedAll(ids);
@@ -135,10 +171,10 @@ export const getTurnoEsperaAbierto = (id: number) :Promise<TurnoEspera[]> =>{
 
 
 export const postTurnoEspera = (id_efe_ser_esp: number, id_profesional_solicitante: number,
-  id_efector_solicitante: number,id_paciente:number, estudio_requerido: number[], prioridad: number ) => {
+  id_efector_solicitante: number,id_paciente:number, estudio_requerido: number[], prioridad: number, cupo:boolean ) => {
   
     return http.post("turno_espera/", {id_efe_ser_esp,id_profesional_solicitante,
-    id_efector_solicitante,id_paciente,estudio_requerido, prioridad,});
+    id_efector_solicitante,id_paciente,estudio_requerido, prioridad, cupo,});
 };
 
 

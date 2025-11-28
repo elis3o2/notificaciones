@@ -1,7 +1,7 @@
 import requests
 import emoji
 from decouple import config
-from src.models import EfeSerEspPlantilla, Mensaje
+from src.models import EfeSerEspPlantilla, Mensaje, Flow, TurnoFlow
 import re
 import logging
 logger = logging.getLogger(__name__)
@@ -239,3 +239,40 @@ def fetch_profesional(id_prof=None, id_efector=None, nombre=None, apellido=None)
         logger.exception("Error consultando Informix (profesional list)")
         raise
 
+
+def start_flow(numero,flowName):
+    api_url = config('API_WHATSAPP_FLOW') 
+    
+    port = config('LISTEN_PORT')
+    api = config('API_LISTEN')
+    endpoint = f"http://localhost:{port}/{api}"
+    # Preparar datos para la API externa (form-data)
+    payload = {
+        "numero": numero,
+        "flowName": flowName,
+        "endpoint": endpoint
+    }
+
+    try:
+        # Realizar solicitud a la API externa
+        response = requests.post(api_url, data=payload)
+        
+        # Devolver la respuesta directa del servidor externo
+        # Incluyendo el código de estado y el contenido
+        return Response(
+            data=response.json(),
+            status=response.status_code
+        )
+        
+    except requests.exceptions.RequestException as e:
+        # En caso de error de conexión
+        return Response(
+            {"error": f"No se pudo conectar con el servicio de WhatsApp: {str(e)}"},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE
+        )
+    except ValueError as e:
+        # En caso de que la respuesta no sea JSON válido
+        return Response(
+            {"error": f"Respuesta inválida del servidor: {str(e)}", "raw_response": response.text},
+            status=status.HTTP_502_BAD_GATEWAY
+        )

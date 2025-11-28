@@ -37,7 +37,6 @@ export default function AddEspera(): React.ReactElement {
   const efQuery = search.get("efector");
   const stateEf = (location.state as number) ?? undefined;
   const efectorId = efQuery ? Number(efQuery) : stateEf ?? null;
-
   const [efector, setEfector] = useState<Efector | null>(null);
   const [loadingEfector, setLoadingEfector] = useState(false);
   const [errorEfector, setErrorEfector] = useState<string | null>(null);
@@ -52,7 +51,8 @@ export default function AddEspera(): React.ReactElement {
     useState<EfeSerEspCompleto | null>(null);
   const [finishEfeSerEsp, setFinishEfeSerEsp] = useState(false);
 
-  // NUEVO: estados para estudios requeridos
+  const [cupo, setCupo] = useState(false)
+
   const [estudioRequerido, setEstudioRequerido] = useState<EstudioRequerido[]>([]);
   const [finishEstudioRequerido, setFinishEstudioRequerido] = useState(false);
 
@@ -173,7 +173,7 @@ export default function AddEspera(): React.ReactElement {
       const idPaciente = paciente!.id;
       const idsEstudios = estudioRequerido.map(e => e.id)
       // llamada al backend (asegurate que postTurnoEspera devuelva una Promise)
-      await postTurnoEspera(idEfeSerEsp, idProf, idEfeSolicitante, idPaciente, idsEstudios, prioridadNum);
+      await postTurnoEspera(idEfeSerEsp, idProf, idEfeSolicitante, idPaciente, idsEstudios, prioridadNum, cupo);
 
       // éxito: mostrar alerta
       setAlertMsg("Turno en espera creado correctamente.");
@@ -310,8 +310,10 @@ export default function AddEspera(): React.ReactElement {
       )}
 
       {/* Selección de especialidad/servicio */}
-      {!finishEfeSerEsp && finishProfesional ? (
+      {!finishEfeSerEsp&& efector && finishProfesional ? (
         <LookEfeSerEsp
+         setCupo={setCupo}
+          efector={efector}
           setEfeSerEspSeleccionado={setEfeSerEspSeleccionado}
           setFinishEfeSerEsp={setFinishEfeSerEsp}
         />
