@@ -13,7 +13,6 @@ import {
   InputLabel,
   Select,
   Paper,
-  Popover,
   Table,
   TableBody,
   TableCell,
@@ -24,7 +23,6 @@ import {
   Tooltip,
   Typography,
   Switch,
-  FormGroup,
   Skeleton,
   Pagination,
   Stack,
@@ -64,7 +62,7 @@ export default function TurnosPage() {
   }>({ efectores: [], servicios: [], fechaDesde: null, fechaHasta: null });
 
   // UI / estado
-  const [anchorCols, setAnchorCols] = useState<null | HTMLElement>(null);
+  const [_, setAnchorCols] = useState<null | HTMLElement>(null);
   const [compactView, setCompactView] = useState(false);
   const [page, setPage] = useState<number>(1);
   const pageSize = 25;
@@ -329,9 +327,7 @@ export default function TurnosPage() {
     vis['nombre'] = false; vis['apellido'] = false; vis['prof_nombre'] = false; vis['prof_apellido'] = false;
     return vis;
   }, [allColumns]);
-  const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(initialVisibility);
-  function toggleColumn(key: string) { setVisibleColumns(prev => ({ ...prev, [key]: !prev[key] })); }
-  function showAll() { const next: Record<string, boolean> = {}; allColumns.forEach(c => next[c.key] = true); setVisibleColumns(next); }
+  const [visibleColumns, ] = useState<Record<string, boolean>>(initialVisibility);
   const visibleKeys = allColumns.filter(c => visibleColumns[c.key]).map(c => c.key);
   const visibleCount = Math.max(1, visibleKeys.length);
   const tableMinWidth = useMemo(() => Math.max(visibleCount * 110, 700), [visibleCount]);
@@ -412,7 +408,6 @@ export default function TurnosPage() {
         return (
           <TableCell key={columnKey} sx={cellSx(160)}>
             <Chip size="small" label={estadoRespChipLabel(t)} color={estadoRespChipColor(t) as any} variant="outlined"  />
-            {t.fecha_estado_paciente ? <DateTimeStack iso={t.fecha_estado_paciente} /> : null}
           </TableCell>
         );
       case 'dni': return <TableCell key={columnKey} sx={cellSx(140)}>{wrapTypography(t.paciente_dni ?? '—')}</TableCell>;
