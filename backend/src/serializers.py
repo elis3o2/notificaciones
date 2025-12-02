@@ -6,8 +6,8 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework import serializers
 from src.models import (Plantilla, EstadoMsj, EstadoTurno,
                 Turno, Mensaje, Efector, Servicio, Especialidad, Deriva, EfeSerEspPlantilla,
-                EstadoTurnoEspera, TurnoEspera, EfeSerEsp, EstudioRequerido, EstadoTurnoPaciente)
-from src.utils import fetch_paciente, fetch_profesional, get_actual_state
+                EstadoTurnoEspera, TurnoEspera, EfeSerEsp, EstudioRequerido, EstadoTurnoPaciente, Flow, TurnoFlow)
+from src.utils import fetch_paciente, fetch_profesional, update_msg_state
 import re
 from django.utils import timezone
 from datetime import datetime, date
@@ -400,7 +400,7 @@ class TurnoMergedSerializer(serializers.ModelSerializer):
     msj_confirmado = serializers.IntegerField(read_only=True, allow_null=True)
     msj_cancelado = serializers.IntegerField(read_only=True, allow_null=True)
     msj_reprogramado = serializers.IntegerField(read_only=True, allow_null=True)
-
+    # fecha_estado_paciente = serializers.SerializerMethodField()
     # Campos extra desde Informix
     paciente_nombre = serializers.CharField(read_only=True, allow_null=True)
     paciente_apellido = serializers.CharField(read_only=True, allow_null=True)
@@ -412,11 +412,11 @@ class TurnoMergedSerializer(serializers.ModelSerializer):
     estado_paciente = EstadoTurnoPacienteSerializer(source="id_estado_paciente", read_only=True)
     # Nuevo campo dinámico
     mensaje_asociado = serializers.SerializerMethodField()
-
+    
     class Meta:
         model = Turno
         fields = [
-            "id","fecha", "hora", "estado", "estado_paciente",
+            "id","fecha", "hora", "estado", "estado_paciente",# "fecha_estado_paciente",
             "msj_recordatorio", "msj_confirmado", "msj_cancelado", "msj_reprogramado",
             "efe_ser_esp",
             "paciente_nombre", "paciente_apellido", "paciente_dni",
@@ -436,11 +436,12 @@ class TurnoMergedSerializer(serializers.ModelSerializer):
              .order_by("-fecha_envio")
             )
         
+        dic = []
         for m in mensajes:
-            get_actual_state(m.id, m.id_mensaje, m.numero)
-        
-        return [
-            {
+            print(m)
+            if m.id_estado_id >= 0 and m.id_estado_id < 3:
+                update_msg_state(m)
+            dic.append({
                 "id": m.id,
                 "id_mensaje": m.id_mensaje,
                 "numero": m.numero if m.numero else None,
@@ -458,10 +459,31 @@ class TurnoMergedSerializer(serializers.ModelSerializer):
                     } if m.id_plantilla.id_tipo else None,
                 } if m.id_plantilla else None,
                 "fecha_last_ack": m.fecha_last_ack if m.fecha_last_ack else None,
-            }
-            for m in mensajes
-        ]
-    
+            })
+        return dic
+    '''
+    def get_fecha_estado_paciente(self, obj):
+        flow_ids = TurnoFlow.objects.filter(id_turno=obj.id).values_list("id_flow", flat=True)
+
+        # usar obj.id_estado_id (atributo del modelo Turno)
+        if obj.id_estado_id in (1, 2):
+            flow = (
+                Flow.objects.filter(id__in=flow_ids, id_plantilla_flow=1)
+                .order_by("fecha_cierre")
+                .first()
+            )
+            return flow.fecha_cierre if flow else None
+
+        flow = (
+            Flow.objects.filter(id__in=flow_ids, id_plantilla_flow=1)
+            .order_by("fecha_inicio")
+            .first()
+        )
+        return flow.fecha_inicio if flow else None
+'''
+
+
+
 
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):

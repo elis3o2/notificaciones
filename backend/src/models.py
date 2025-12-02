@@ -356,6 +356,8 @@ class Flow(models.Model):
     )
     desde = models.CharField(max_length=15)
     para = models.CharField(max_length=15)
+    fecha_inicio = models.DateTimeField()
+    fecha_cierre = models.DateTimeField(null=True, blank=True)
     id_estado =  models.ForeignKey(
         EstadoFlow, 
         models.DO_NOTHING, 

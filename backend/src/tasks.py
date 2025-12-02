@@ -12,6 +12,8 @@ from src.models import (Turno, Plantilla, Mensaje, LastMod,
                         EfeSerEspPlantilla, EstadoTurno, Efector, Servicio,
                         Especialidad, EfeSerEsp, Flow, TurnoFlow, PlantillaFlow)
 from src.utils import enviar_whatsapp, check_turno, format_plantilla, start_flow
+import random
+
 
 TZ = ZoneInfo("America/Argentina/Buenos_Aires")
 
@@ -524,7 +526,12 @@ def programar_recordatorios():
 
         # distribuimos envíos para turnos en días futuros: evitar picos
         per_day_counter = defaultdict(int)
+        per_day_batches = {}  # nuevo: guarda offsets por (target_date, batch_index)
         tz = timezone.get_current_timezone()
+
+        # parámetros de batching
+        batch_size = 5
+        batch_window_seconds = 180  # 3 minutos = 180s
 
         for r in resultados:
             try:
@@ -554,7 +561,7 @@ def programar_recordatorios():
 
             # construir send_dt de forma robusta
             # si el recordatorio es para el mismo día del turno (dias_antes == 0),
-            # aplicamos las reglas por hora; si no, programamos sobre target_date (ej. 10:00)
+            # aplicamos las reglas por hora; si no, programamos sobre target_date (ej. 12:50)
             if dias_antes == 0:
                 dt_naive = datetime.combine(fecha_turno, hora_turno)
                 try:
@@ -574,9 +581,7 @@ def programar_recordatorios():
                     else:
                         send_dt = send_dt - timedelta(hours=4)
                 else:
-                    # si dias_antes == 0 pero fecha_turno > hoy (raro, porque si dias_antes==0
-                    # y target_date==hoy la condición anterior debería haber filtrado),
-                    # igual colocamos envío a las 10:00 del target_date y distribuimos
+                    # si dias_antes == 0 pero fecha_turno > hoy (raro), colocamos envío a la base y escalonamos
                     base_naive = datetime.combine(fecha_turno, time(12, 50))
                     try:
                         base = make_aware(base_naive, tz)
@@ -586,12 +591,32 @@ def programar_recordatorios():
                         except Exception:
                             print(f"[ERROR] No se pudo crear base aware para id_turno={id_turno}")
                             continue
+
                     idx = per_day_counter[target_date]
-                    send_dt = base + timedelta(seconds=120 * idx)
+                    # cálculo de batching: batch index y posición dentro del batch
+                    batch_index = idx // batch_size
+                    pos_in_batch = idx % batch_size
+                    batch_key = (target_date, batch_index)
+
+                    # generar offsets aleatorios ordenados para el batch si no existen
+                    if batch_key not in per_day_batches:
+                        try:
+                            offsets = sorted(random.sample(range(batch_window_seconds), k=batch_size))
+                        except ValueError:
+                            # fallback en caso raro
+                            offsets = sorted(random.randint(0, batch_window_seconds - 1) for _ in range(batch_size))
+                        per_day_batches[batch_key] = offsets
+
+                    offsets = per_day_batches[batch_key]
+                    offset = offsets[pos_in_batch]
+
+                    # send_dt: base + (batch_index * batch_window_seconds) + offset_in_batch
+                    send_dt = base + timedelta(seconds=(batch_index * batch_window_seconds + offset))
+
                     per_day_counter[target_date] += 1
 
             else:
-                # dias_antes > 0 -> programar en target_date a las 10:00 (y escalonar)
+                # dias_antes > 0 -> programar en target_date a la base (12:50) y escalonar con batching
                 base_naive = datetime.combine(target_date, time(12, 50))
                 try:
                     base = make_aware(base_naive, tz)
@@ -601,8 +626,26 @@ def programar_recordatorios():
                     except Exception:
                         print(f"[ERROR] No se pudo crear base aware para id_turno={id_turno}")
                         continue
+
                 idx = per_day_counter[target_date]
-                send_dt = base + timedelta(seconds=120 * idx)
+                # cálculo de batching: batch index y posición dentro del batch
+                batch_index = idx // batch_size
+                pos_in_batch = idx % batch_size
+                batch_key = (target_date, batch_index)
+
+                # generar offsets aleatorios ordenados para el batch si no existen
+                if batch_key not in per_day_batches:
+                    try:
+                        offsets = sorted(random.sample(range(batch_window_seconds), k=batch_size))
+                    except ValueError:
+                        offsets = sorted(random.randint(0, batch_window_seconds - 1) for _ in range(batch_size))
+                    per_day_batches[batch_key] = offsets
+
+                offsets = per_day_batches[batch_key]
+                offset = offsets[pos_in_batch]
+
+                send_dt = base + timedelta(seconds=(batch_index * batch_window_seconds + offset))
+
                 per_day_counter[target_date] += 1
 
             # comparar con now aware (y debug si algo raro pasa)
@@ -783,41 +826,6 @@ def send_reminder_task(self, detalles):
                 print(f"[WARN] Max retries excedidos para turno {id_turno}. No se enviará recordatorio.")
                 return
 
-        # Si ack >= 0 iniciamos el flow de confirmación
-        if ack is not None and ack >= 0:
-            try:
-                res = start_flow(telefono, "confirmacion-turno")
-            except Exception as ex:
-                print(f"[ERROR] start_flow falla para turno {id_turno}: {ex}")
-                return
-
-            status_code = getattr(res, "status_code", None)
-            body = getattr(res, "data", {}) or {}
-            if status_code == 200 and isinstance(body, dict):
-                flow_pk = body.get("id")
-                # plantilla de ejemplo: ajustar si corresponde
-                plantilla_flow = PlantillaFlow.objects.get(pk=1)
-                if flow_pk:
-                    f, created = Flow.objects.get_or_create(
-                        pk=flow_pk,
-                        defaults={
-                            "id_plantilla_flow": plantilla_flow,
-                            "para": telefono,
-                            "desde": "3416082860",
-                            "id_estado_id": 0
-                        },
-                    )
-                    # si ya existía y querés forzar estado a 0:
-                    if not created and f.id_estado_id != 0:
-                        f.id_estado_id = 0
-                        f.save(update_fields=["id_estado_id"])
-
-                    # crear TurnoFlow idempotente
-                    TurnoFlow.objects.get_or_create(id_turno=turno, id_flow=f)
-
-                    # actualizar estado paciente
-                    turno.id_estado_paciente_id = 4
-                    turno.save(update_fields=["id_estado_paciente"])
 
     except Exception as e:
         print(f"[ERROR general en send_reminder_task para id_turno={id_turno}]: {e}")

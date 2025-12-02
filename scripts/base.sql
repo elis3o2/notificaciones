@@ -190,6 +190,8 @@ CREATE TABLE IF NOT EXISTS flow (
     id_plantilla_flow INT NOT NULL,
     desde VARCHAR(15) NOT NULL,
     para VARCHAR(15) NOT NULL,
+    fecha_inicio DATETIME NOT NULL, 
+    fecha_cierre DATETIME NULL,
     FOREIGN KEY (id_plantilla_flow) REFERENCES plantilla_flow(id),
     FOREIGN KEY (id_estado) REFERENCES estado_flow(id)
 );

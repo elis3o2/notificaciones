@@ -12,41 +12,29 @@ from django.db import connections, DatabaseError
 
 
 
-def get_actual_state(mensaje_id, id_mensaje_externo, numero):
+def update_msg_state(mensaje: Mensaje):
     """
     Consulta la API externa por el estado del mensaje y actualiza Mensaje(pk=mensaje_id).
     Devuelve exactamente lo que devuelve la API externa.
     """
     api_url = config("API_ESTADO_WHATSAPP")
-    params = {"numero": numero, "id": id_mensaje_externo}
-
+    params = {"numero": mensaje.numero, "id": mensaje.id_mensaje}
     try:
-        resp = requests.get(api_url, params=params, timeout=10)
-    except requests.exceptions.RequestException as e:
-        return Response(
-            {"error": "No se pudo conectar con el servicio de WhatsApp", "detail": str(e)},
-            status=status.HTTP_503_SERVICE_UNAVAILABLE,
-        )
-
-    try:
+        resp = requests.get(api_url, params=params, timeout=2)
         data = resp.json()
-    except ValueError:
-        return Response(
-            {"error": "Respuesta inválida (no JSON) desde API externa", "raw_response": resp.text},
-            status=status.HTTP_502_BAD_GATEWAY,
-        )
+
+    except:
+        return mensaje
 
     # Actualizar Mensaje local si existe
     try:
-        msj = Mensaje.objects.get(pk=mensaje_id)
-        msj.fecha_last_ack = now()
+        mensaje.fecha_last_ack = now()
         if "ack" in data:
-            msj.id_estado_id = data["ack"]  # asumimos que id_estado es FK a id de estado
-        msj.save(update_fields=["fecha_last_ack", "id_estado"])
-    except Mensaje.DoesNotExist:
-        pass  # si no existe, no hacemos nada, seguimos devolviendo la respuesta externa
-
-    return Response(data=data, status=resp.status_code)
+            mensaje.id_estado_id = data["ack"]  # asumimos que id_estado es FK a id de estado
+        mensaje.save(update_fields=["fecha_last_ack", "id_estado"])
+        return mensaje
+    except:
+        return mensaje
 
 
 def enviar_whatsapp(numero, mensaje):

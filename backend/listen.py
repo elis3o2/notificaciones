@@ -11,6 +11,10 @@ import signal
 
 from decouple import config
 from aiohttp import web
+import asyncio
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 
 # Django setup
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "core.settings")
@@ -69,19 +73,57 @@ async def get_or_create_flow(pk, para=None, desde=None):
             defaults={
                 "id_plantilla_flow_id": 1,
                 "para": para,
-                "desde": desde,
-                "id_estado_id": 0
+                "desde": "5493416082860",
+                "id_estado_id": 0,
+                "fecha_inicio": datetime.now(tz=ARG_TZ).replace(tzinfo=None)
             },
         )
         return flow
     return await asyncio.to_thread(_)
 
-async def set_flow_estado(pk, estado):
+ARG_TZ = ZoneInfo("America/Argentina/Buenos_Aires")
+
+async def set_flow_estado(pk, estado, fecha):
     def _set():
         f = Flow.objects.get(pk=pk)
         f.id_estado_id = estado
+
+        # Determinar cierre como naive en hora ARG
+        if fecha is None:
+            cierre = datetime.now(tz=ARG_TZ).replace(tzinfo=None)  # naive local ARG
+        else:
+            # si viene epoch (int/float)
+            if isinstance(fecha, (int, float)):
+                # detectar segundos vs ms: si > 1e12 es ms
+                ts = int(fecha / 1000) if fecha > 1e12 else int(fecha)
+                dt_utc = datetime.fromtimestamp(ts, tz=ZoneInfo("UTC"))
+                dt_arg = dt_utc.astimezone(ARG_TZ)
+                cierre = dt_arg.replace(tzinfo=None)
+            elif isinstance(fecha, str):
+                # intentar parse iso; aceptar "2025-12-01T11:33:52" (sin tz)
+                try:
+                    dt = datetime.fromisoformat(fecha)
+                    # si es naive, asumimos que viene en ARG -> lo hacemos naive ARG
+                    if dt.tzinfo is None:
+                        cierre = dt  # ya naive (se asume ARG)
+                    else:
+                        cierre = dt.astimezone(ARG_TZ).replace(tzinfo=None)
+                except Exception:
+                    # fallback: ahora en ARG
+                    cierre = datetime.now(tz=ARG_TZ).replace(tzinfo=None)
+            elif isinstance(fecha, datetime):
+                dt = fecha
+                if dt.tzinfo is None:
+                    cierre = dt  # asumimos ya hora ARG naive
+                else:
+                    cierre = dt.astimezone(ARG_TZ).replace(tzinfo=None)
+            else:
+                cierre = datetime.now(tz=ARG_TZ).replace(tzinfo=None)
+
+        f.fecha_cierre = cierre
         f.save()
         return f.pk
+
     return await asyncio.to_thread(_set)
 
 async def handle_finish(id_flow_pk, plantilla_name=None):
@@ -122,6 +164,7 @@ async def handle_finish(id_flow_pk, plantilla_name=None):
             nuevo_estado_pk = 2
         elif MsgFlowEnv.objects.filter(id_flow_id=id_flow_pk, id_nodo_id=6).exists():
             nuevo_estado_pk = 3
+
 
         if nuevo_estado_pk is not None:
             t.id_estado_paciente_id = nuevo_estado_pk
@@ -198,9 +241,9 @@ async def handler(request: web.Request):
         flow = await get_or_create_flow(id_, para=to, desde=from_)
 
         if evento == "flow_finished" or evento == "error":
-            await set_flow_estado(id_, 1)
+            await set_flow_estado(id_, 1, fecha_hora)
             logger.info("Marked flow %s as finished", id_)
-            await handle_finish(id_, flow_name)
+            await handle_finish(id_, flow_name, fecha_hora)
             return web.json_response({"ok": True, "action": "flow_finished", "id": id_})
 
         elif evento == "incoming_message":

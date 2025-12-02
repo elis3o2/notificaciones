@@ -61,6 +61,11 @@ INSERT INTO estado_turno(id, nombre) VALUES
 
 
 INSERT INTO estado_turno_paciente (id, nombre) VALUES
+(-5, 'SERVER ERROR'),
+(-4, 'FALTAN DATOS'),
+(-3, 'NUMERO INVALIDO'),
+(-2, 'SIN WHATSAPP'),
+(-1, 'FALLIDO'),
 (0, 'SIN DATOS'),
 (1, 'CONFIRMADO'),
 (2, 'CANCELADO'),
@@ -2821,3 +2826,21 @@ INSERT INTO deriva (id_efector,id_efe_ser_esp_deriva,cupo) VALUES
 (41, 1474,1),
 (44, 1474,1),
 (32, 1474,1);
+
+
+INSERT INTO deriva (id_efector,id_efe_ser_esp_deriva,cupo) VALUES
+(32, 1466,0),
+(44, 1466,0),
+(44, 1524,0),
+(32, 1525,0),
+(41, 1525,0),
+(44, 1525,0),
+(32, 1526,0),
+(41, 1526,0),
+(44, 1526,0),
+(32, 1527,0),
+(41, 1527,0),
+(44, 1527,0),
+(32, 1581,0),
+(41, 1581,0),
+(44, 1581,0);

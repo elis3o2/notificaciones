@@ -123,25 +123,14 @@ export const getTurnosErrorMergedLimit = (cantidad: number, offset:number, efect
 
 
 
-export interface TurnosAlertaResponse {
-    count_total: number;
-    grupos: {
-        incorrectos: TurnoExtend[];
-        cancelados: TurnoExtend[];
-        sin_respuesta: TurnoExtend[];
-    }
-}
 
-export const getTurnosAlerta = (
-  ids: Array<string | number>
-): Promise<TurnosAlertaResponse> => {
+
+export const getTurnosAlerta = (tipo: string, cantidad: number, offset:number, efectores: number[], servicios: number[], fechaDesde: string | null, fechaHasta: string| null ):
+ Promise<{response: TurnoExtend[], count:number}> => {
   const url = '/turnos-merged-alerta/';
 
-  return http.get<TurnosAlertaResponse>(url, {
-    params: {
-      'efectores[]': ids   // <<< esto genera efectores[]=1&efectores[]=2
-    }
-  }).then(res => res.data);
+  return http.get<{response: TurnoExtend[], count:number}>(url, { params: { tipo, cantidad, offset, efectores, servicios, fechaDesde, fechaHasta }
+   }).then(res => res.data);
 };
 
 
