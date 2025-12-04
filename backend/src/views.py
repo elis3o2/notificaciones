@@ -23,7 +23,7 @@ from src.serializers import(PlantillaSerializer, EstadoMsjSerializer, EstadoTurn
                 EfeSerEspCompletoSerializer, TurnoEsperaCreateSerializer, TurnoEsperaCloseSerializer,
                 EstudioRequeridoSerializer )
 from typing import List
-from src.utils import enviar_whatsapp, fetch_paciente, fetch_profesional
+from src.utils.utils import enviar_whatsapp, fetch_paciente, fetch_profesional
 import logging
 logger = logging.getLogger(__name__)
 

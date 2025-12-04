@@ -41,7 +41,6 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     'rest_framework_simplejwt',
-    'wkhtmltopdf',
 ]
 
 MIDDLEWARE = [
@@ -117,22 +116,22 @@ LANGUAGE_CODE = 'en-us'
 
 USE_I18N = True
 
-
-REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (),  # Sin autenticación
-    'DEFAULT_PERMISSION_CLASSES': (
-        'rest_framework.permissions.AllowAny',
-    ),
-}
-
+#
 #REST_FRAMEWORK = {
-#    'DEFAULT_AUTHENTICATION_CLASSES': (
-#        'rest_framework_simplejwt.authentication.JWTAuthentication',
-#    ),
+#    'DEFAULT_AUTHENTICATION_CLASSES': (),  # Sin autenticación
 #    'DEFAULT_PERMISSION_CLASSES': (
-#        'rest_framework.permissions.IsAuthenticated',
+#        'rest_framework.permissions.AllowAny',
 #    ),
 #}
+#
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',
+    ),
+}
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
@@ -157,7 +156,7 @@ CELERY_BEAT_SCHEDULE = {
     },
     "recordatorios-diarios": {
         "task": "src.tasks.programar_recordatorios",  # ruta completa a la tarea
-        "schedule": crontab(hour=10, minute=10),
+        "schedule": crontab(hour=13, minute=11),
     },
 }
 

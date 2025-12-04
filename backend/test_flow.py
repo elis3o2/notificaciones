@@ -11,7 +11,7 @@ from django.utils import timezone
 from src.models import (Turno, Plantilla, Mensaje, LastMod,
                         EfeSerEspPlantilla, EstadoTurno, Efector, Servicio,
                         Especialidad, EfeSerEsp, Flow, TurnoFlow, PlantillaFlow)
-from src.utils import enviar_whatsapp, check_turno, format_plantilla, start_flow
+from src.utils.utils import enviar_whatsapp, check_turno, format_plantilla, start_flow
 
 id_turno = 9994750
 telefono = ("549" + str(341) + str(6082860)).replace(" ", "")

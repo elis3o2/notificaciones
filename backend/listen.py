@@ -243,7 +243,7 @@ async def handler(request: web.Request):
         if evento == "flow_finished" or evento == "error":
             await set_flow_estado(id_, 1, fecha_hora)
             logger.info("Marked flow %s as finished", id_)
-            await handle_finish(id_, flow_name, fecha_hora)
+            await handle_finish(id_, flow_name)
             return web.json_response({"ok": True, "action": "flow_finished", "id": id_})
 
         elif evento == "incoming_message":

@@ -1,7 +1,7 @@
 import requests
 import emoji
 from decouple import config
-from src.models import EfeSerEspPlantilla, Mensaje, Flow, TurnoFlow
+from src.models import EfeSerEspPlantilla, Mensaje, Flow, TurnoFlow, Turno, Plantilla
 import re
 import logging
 logger = logging.getLogger(__name__)
@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.utils.timezone import now
 from django.db import connections, DatabaseError
+from datetime import timedelta, datetime, date, time
 
 
 
@@ -264,3 +265,56 @@ def start_flow(numero,flowName):
             {"error": f"Respuesta inválida del servidor: {str(e)}", "raw_response": response.text},
             status=status.HTTP_502_BAD_GATEWAY
         )
+    
+
+
+def update_estado_Turno(id_sisr: int, id_pac: int, id_est) -> Turno | None: 
+    try:
+        # Obtener instancia
+        t = Turno.objects.filter(id_sisr=id_sisr, id_paciente=id_pac).first()
+        if t is None:
+            print(f"[DEBUG] No existe Turno local con id={id_sisr} => se ignora notificación (estado={estado})")
+            return None
+
+        # Asignar estado en la instancia y guardar (mínimo)
+        if t.id_estado_id != id_est:
+            t.id_estado_id = id_est
+            t.save(update_fields=["id_estado_id"])
+
+        print(f"[INFO] Actualizado Turno id={id_sisr} a estado={id_sisr}")
+        return t
+    
+    except Exception as ex:
+        print(f"[ERROR] al actualizar Turno id={id_sisr}: {ex}")
+        return None
+
+def create_Turno(id_sisr: int, id_pac: int, id_est: int, 
+                 id_ess: int, fecha: date, hora: time) -> Turno:
+    t = Turno.objects.create(
+            id_sisr=id_sisr,
+            id_paciente=id_pac,
+            id_estado_id=id_est,
+            id_estado_paciente_id=0,
+            msj_confirmado=0,
+            msj_reprogramado=0,
+            msj_cancelado=0,
+            msj_recordatorio=0,
+            id_efe_ser_esp_id=id_ess,
+            fecha=fecha,
+            hora=hora
+        )
+    return t
+
+
+def create_Mensaje(id: str|None, turno: Turno, numero: str | None,
+                plantilla: Plantilla, estado: int) -> None:
+    Mensaje.objects.create(
+        id_mensaje=id,
+        id_turno=turno,
+        numero=numero,
+        id_plantilla=plantilla,
+        fecha_envio=datetime.now(),
+        id_estado_id=estado,
+    )
+
+    

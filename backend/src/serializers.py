@@ -7,7 +7,7 @@ from rest_framework import serializers
 from src.models import (Plantilla, EstadoMsj, EstadoTurno,
                 Turno, Mensaje, Efector, Servicio, Especialidad, Deriva, EfeSerEspPlantilla,
                 EstadoTurnoEspera, TurnoEspera, EfeSerEsp, EstudioRequerido, EstadoTurnoPaciente, Flow, TurnoFlow)
-from src.utils import fetch_paciente, fetch_profesional, update_msg_state
+from src.utils.utils import fetch_paciente, fetch_profesional, update_msg_state
 import re
 from django.utils import timezone
 from datetime import datetime, date
@@ -49,9 +49,9 @@ class TurnoSerializer(serializers.ModelSerializer):
 
 
 class MensajeSerializer(serializers.ModelSerializer):
-    turno: Turno = TurnoSerializer(source='id_turno', read_only=True)
-    plantilla: Plantilla = PlantillaSerializer(source='id_plantilla', read_only=True)
-    estado: EstadoMsj = EstadoMsjSerializer(source='id_estado', read_only=True)
+    turno = TurnoSerializer(source='id_turno', read_only=True)
+    plantilla = PlantillaSerializer(source='id_plantilla', read_only=True)
+    estado = EstadoMsjSerializer(source='id_estado', read_only=True)
     class Meta:
         model = Mensaje
         fields = '__all__'

@@ -13,6 +13,7 @@ import {
   InputLabel,
   Select,
   Paper,
+  Popover,
   Table,
   TableBody,
   TableCell,
@@ -26,7 +27,8 @@ import {
   Skeleton,
   Pagination,
   Stack,
-  ListItemText
+  ListItemText,
+  FormGroup
 } from '@mui/material';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -62,7 +64,7 @@ export default function TurnosPage() {
   }>({ efectores: [], servicios: [], fechaDesde: null, fechaHasta: null });
 
   // UI / estado
-  const [_, setAnchorCols] = useState<null | HTMLElement>(null);
+  const [anchorCols, setAnchorCols] = useState<null | HTMLElement>(null);
   const [compactView, setCompactView] = useState(false);
   const [page, setPage] = useState<number>(1);
   const pageSize = 25;
@@ -327,7 +329,13 @@ export default function TurnosPage() {
     vis['nombre'] = false; vis['apellido'] = false; vis['prof_nombre'] = false; vis['prof_apellido'] = false;
     return vis;
   }, [allColumns]);
-  const [visibleColumns, ] = useState<Record<string, boolean>>(initialVisibility);
+  const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(initialVisibility);
+
+  // funciones para manejo de visibilidad de columnas (extraídas del código antiguo)
+  function toggleColumn(key: string) { setVisibleColumns(prev => ({ ...prev, [key]: !prev[key] })); }
+  function showAll() { const next: Record<string, boolean> = {}; allColumns.forEach(c => next[c.key] = true); setVisibleColumns(next); }
+  function invertVisibility() { setVisibleColumns(prev => { const next: Record<string, boolean> = {}; allColumns.forEach(c => next[c.key] = !prev[c.key]); return next; }); }
+
   const visibleKeys = allColumns.filter(c => visibleColumns[c.key]).map(c => c.key);
   const visibleCount = Math.max(1, visibleKeys.length);
   const tableMinWidth = useMemo(() => Math.max(visibleCount * 110, 700), [visibleCount]);
@@ -598,6 +606,28 @@ export default function TurnosPage() {
               <Button startIcon={<GetAppIcon />} variant="contained" onClick={downloadCSV} disabled={loading || !turnos.length} size="small">Descargar</Button>
 
               <IconButton onClick={(e) => setAnchorCols(e.currentTarget)} size="small" title="Columnas"><ViewColumnIcon fontSize="small" /></IconButton>
+
+              {/* Popover para columnas (integrado desde el código antiguo) */}
+              <Popover open={Boolean(anchorCols)} anchorEl={anchorCols} onClose={() => setAnchorCols(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
+                <Box sx={{ p: 2, minWidth: 260 }}>
+                  <Typography variant="subtitle2">Columnas visibles</Typography>
+                  <FormGroup>
+                    {allColumns.map(c => (
+                      <FormControlLabel
+                        key={c.key}
+                        control={<Checkbox checked={Boolean(visibleColumns[c.key])} onChange={() => toggleColumn(c.key)} />}
+                        label={c.label}
+                      />
+                    ))}
+                  </FormGroup>
+
+                  <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                    <Button size="small" onClick={() => { showAll(); setAnchorCols(null); }}>Mostrar todo</Button>
+                    <Button size="small" onClick={() => { invertVisibility(); setAnchorCols(null); }}>Invertir</Button>
+                  </Box>
+                </Box>
+              </Popover>
+
               <IconButton onClick={( _) => navigate('/historico')} size="small" title="Histrico"><MenuBookIcon fontSize="small" /></IconButton>
             </Box>
           </Grid>
@@ -629,7 +659,7 @@ export default function TurnosPage() {
             ))}
 
             {!loading && !turnos.length && (
-              <TableRow><TableCell colSpan={visibleCount + 1}><Box sx={{ p: 3, textAlign: 'center' }}><Typography>No hay turnos para mostrar.</Typography></Box></TableCell></TableRow>
+              <TableRow><TableCell colSpan={visibleCount}><Box sx={{ p: 3, textAlign: 'center' }}><Typography>No hay turnos para mostrar.</Typography></Box></TableCell></TableRow>
             )}
 
             <AnimatePresence initial={false} mode="popLayout">
