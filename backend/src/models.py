@@ -364,7 +364,7 @@ class Flow(models.Model):
         models.DO_NOTHING, 
         db_column='id_plantilla_flow'
     )
-    desde = models.CharField(max_length=15)
+    id_sesion = models.ForeignKey(Sesion, models.DO_NOTHING, db_column='id_sesion')
     para = models.CharField(max_length=15)
     fecha_inicio = models.DateTimeField()
     fecha_cierre = models.DateTimeField(null=True, blank=True)
