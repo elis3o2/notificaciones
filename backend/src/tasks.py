@@ -545,7 +545,7 @@ def send_reminder_task(self, detalles) -> None:
                     id_mensaje=response_data.get("id", None)
                     fecha_res =response_data.get("time", None)
                     ses = response_data.get("session", None)
-                    create_Mensaje(id_mensaje, turno, telefono, plantilla, ack, time, ses)
+                    create_Mensaje(id_mensaje, turno, telefono, plantilla, ack, fecha_res, ses)
 
                 except Exception as ex:
                     print(f"[ERROR] al crear Mensaje para turno {id_turno}: {ex}")
