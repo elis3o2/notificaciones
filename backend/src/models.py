@@ -80,12 +80,12 @@ class Especialidad(models.Model):
 
 
 class EfeSerEsp(models.Model):
-    id = models.IntegerField(primary_key=True)
-    id_efector = models.ForeignKey(
+    id  = models.IntegerField(primary_key=True)
+    id_efector  = models.ForeignKey(
         Efector, models.DO_NOTHING, db_column='id_efector')
-    id_servicio = models.ForeignKey(
+    id_servicio  = models.ForeignKey(
         Servicio, models.DO_NOTHING, db_column='id_servicio')
-    id_especialidad = models.ForeignKey(
+    id_especialidad  = models.ForeignKey(
         Especialidad, models.DO_NOTHING, db_column='id_especialidad')
     
     class Meta:
@@ -128,12 +128,22 @@ class Turno(models.Model):
         db_table = 'turno'
 
 
+class Sesion(models.Model):
+    id = models.CharField(max_length=3, primary_key=True)
+    numero = models.CharField(max_length=16)
+
+    class Meta:
+        managed = False
+        db_table = 'sesion'
+
 class Mensaje(models.Model):
     id = models.AutoField(primary_key=True)
     id_mensaje = models.CharField(max_length=40, null=True, blank=True)
     id_turno = models.ForeignKey(
         Turno, models.DO_NOTHING, db_column='id_turno', null=True, blank=True)
     numero = models.CharField(max_length=20)
+    id_sesion = models.ForeignKey(
+        Sesion, models.DO_NOTHING, db_column='id_sesion', null=True, blank=True)
     id_plantilla = models.ForeignKey(
         Plantilla, models.DO_NOTHING, db_column='id_plantilla')
     fecha_envio = models.DateTimeField()
@@ -232,9 +242,9 @@ class EstudioRequerido(models.Model):
 
 class TurnoEsperaEstudio(models.Model):
     id = models.AutoField(primary_key=True)
-    id_turno_espera = models.ForeignKey(
+    id_turno_espera  = models.ForeignKey(
         TurnoEspera,  models.DO_NOTHING, db_column='id_turno_espera')
-    id_estudio_requerido = models.ForeignKey(
+    id_estudio_requerido  = models.ForeignKey(
         EstudioRequerido, models.DO_NOTHING, db_column='id_estudio_requerido')
     
     class Meta:
@@ -242,7 +252,7 @@ class TurnoEsperaEstudio(models.Model):
 
 class CustomUser(AbstractUser):
     efectores = models.ManyToManyField(Efector, related_name="usuarios", blank=True)
-    dni = models.CharField(max_length=15, unique=True, null=True)
+    dni  = models.CharField(max_length=15, unique=True, null=True)
 
     def __str__(self):
         return self.username
@@ -257,11 +267,11 @@ class RegistroBanderas(models.Model):
         blank=True
     )
     efec_esp_serv_plantilla = models.ForeignKey(EfeSerEspPlantilla, on_delete=models.DO_NOTHING)
-    bandera = models.ForeignKey(TipoPlantilla, on_delete=models.DO_NOTHING)
-    valor_set = models.IntegerField()
-    plantilla = models.ForeignKey(Plantilla, on_delete=models.DO_NOTHING, null=True)
-    dias_antes = models.IntegerField(null=True)
-    fecha = models.DateTimeField(auto_now_add=True)
+    bandera= models.ForeignKey(TipoPlantilla, on_delete=models.DO_NOTHING)
+    valor_set  = models.IntegerField()
+    plantilla  = models.ForeignKey(Plantilla, on_delete=models.DO_NOTHING, null=True)
+    dias_antes  = models.IntegerField(null=True)
+    fecha = models.DateTimeField(auto_now_add=True) 
 
 class LastMod(models.Model):
     fecha = models.DateTimeField()

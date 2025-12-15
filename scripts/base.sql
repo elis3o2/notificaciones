@@ -85,17 +85,25 @@ CREATE TABLE IF NOT EXISTS turno(
 );
 
 
+CREATE TABLE IF NOT EXISTS sesion (
+    id VARCHAR(3) PRIMARY KEY NOT NULL,
+    numero VARCHAR(16) NOT NULL
+);
+
+
 -- Tabla de mensajes enviados
 CREATE TABLE IF NOT EXISTS mensaje (
     id INT AUTO_INCREMENT PRIMARY KEY NOT NULL,
     id_mensaje VARCHAR(32) NULL,
     id_turno INT NULL,
     numero VARCHAR(16) NULL,
+    id_sesion VARCHAR(3) NULL,
     id_plantilla INT NOT NULL,
     fecha_envio DATETIME NOT NULL,
     fecha_last_ack DATETIME NULL,
     id_estado INT NOT NULL,
     FOREIGN KEY (id_turno) REFERENCES turno(id),
+    FOREIGN KEY (id_sesion) REFERENCES sesion(id),
     FOREIGN KEY (id_estado) REFERENCES estado_msj(id),
     FOREIGN KEY (id_plantilla) REFERENCES plantilla(id)
 );
@@ -188,10 +196,11 @@ CREATE TABLE IF NOT EXISTS flow (
     id VARCHAR(20) NOT NULL PRIMARY KEY,
     id_estado INT NOT NULL,
     id_plantilla_flow INT NOT NULL,
-    desde VARCHAR(15) NOT NULL,
-    para VARCHAR(15) NOT NULL,
+    id_sesion VARCHAR(3) NOT NULL,
+    numero VARCHAR(16) NOT NULL,
     fecha_inicio DATETIME NOT NULL, 
     fecha_cierre DATETIME NULL,
+    FOREIGN KEY (id_sesion) REFERENCES sesion(id),
     FOREIGN KEY (id_plantilla_flow) REFERENCES plantilla_flow(id),
     FOREIGN KEY (id_estado) REFERENCES estado_flow(id)
 );

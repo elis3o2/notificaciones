@@ -52,6 +52,7 @@ export interface TurnoExtend {
     id: number;
     estado: EstadoTurno;
     estado_paciente: EstadoTurnoPaciente;
+    fecha_estado_paciente: string;
     fecha: string;
     hora: string;
     msj_confirmado: number;

@@ -359,7 +359,7 @@ export default function AddEspera(): React.ReactElement {
         </Box>
       )}
 
-      {/* -- NUEVO: Tarjeta que muestra los estudios seleccionados (igual estilo que paciente/profesional) -- */}
+
       {finishEstudioRequerido && (
         <Paper elevation={2} sx={{ p: 2, mb: 2, position: "relative", ...estudioStyle }}>
           <IconButton
@@ -392,7 +392,7 @@ export default function AddEspera(): React.ReactElement {
 
       <Divider sx={{ my: 2 }} />
 
-      {/* -- PRIORIDAD: Sólo se muestra si canSelectPriority === true -- */}
+
       {canSelectPriority && (
         <Paper elevation={2} sx={{ p: 2, mb: 2, position: "relative", ...priorityBg(priority) }}>
           <Typography variant="h6">Prioridad</Typography>

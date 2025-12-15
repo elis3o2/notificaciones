@@ -10,4 +10,6 @@ backend/src/migrations
 frontend/.env
 backend/core/informix_jdbc_backend/__pycache__
 backend/staticfiles/
-frontend/vite.config.ts
+.idea
+.mypy_cache
+backend/src/utils/__pycache__
