@@ -135,16 +135,18 @@ def verificar_turnos() -> None:
 
                             # obtener EfeSerEsp para sacar efector/servicio/especialidad (asumimos que existe)
                             ese_obj = EfeSerEsp.objects.select_related(
-                                    "id_efector", "id_servicio", "id_especialidad"
-                                ).get(pk=id_efe_ser_esp)
+                                "id_efector", "id_servicio", "id_especialidad"
+                            ).get(pk=id_efe_ser_esp)
 
-                            
-                            id_efector = ese_obj.id_efector
+                            # IDs reales
+                            id_efector = ese_obj.id_efector_id
                             id_servicio = ese_obj.id_servicio_id
                             id_especialidad = ese_obj.id_especialidad_id
 
-                            nombre_servicio = ese_obj.id_servicio_nombre 
-                            nombre_especialidad = ese_obj.id_especialidad_nombre 
+                            # Valores reales (nombre)
+                            nombre_efector = ese_obj.id_efector.nombre
+                            nombre_servicio = ese_obj.id_servicio.nombre
+                            nombre_especialidad = ese_obj.id_especialidad.nombre
                             # datos del efector vía cursor Informix
                             nombre_efector = calle = altura = letra = coordx = coordy = tel_efe = calle_nom = None
                             
