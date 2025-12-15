@@ -244,13 +244,12 @@ class TurnoEsperaSerializer(serializers.ModelSerializer):
         fields = ["id", "efector", "servicio","cupo","especialidad", "efector_solicitante",
                   "paciente", "profesional_solicitante", "estado", "prioridad",
                   "usuario_cierre", "usuario_creacion", "fecha_hora_creacion", 
-                  "fecha_hora_cierre", "estudio_requerido"]   # incluye los id_..., más los serializer fields
+                  "fecha_hora_cierre", "estudio_requerido"]   
 
     def get_paciente(self, obj):
         try:
             data = fetch_paciente(id_persona=obj.id_paciente)
             if data:
-                # devolvemos un único paciente (porque es por id)
                 return PacienteSerializer(data[0]).data
             return None
         except Exception:
@@ -400,7 +399,7 @@ class TurnoMergedSerializer(serializers.ModelSerializer):
     msj_confirmado = serializers.IntegerField(read_only=True, allow_null=True)
     msj_cancelado = serializers.IntegerField(read_only=True, allow_null=True)
     msj_reprogramado = serializers.IntegerField(read_only=True, allow_null=True)
-    # fecha_estado_paciente = serializers.SerializerMethodField()
+    fecha_estado_paciente = serializers.SerializerMethodField()
     # Campos extra desde Informix
     paciente_nombre = serializers.CharField(read_only=True, allow_null=True)
     paciente_apellido = serializers.CharField(read_only=True, allow_null=True)
@@ -416,7 +415,7 @@ class TurnoMergedSerializer(serializers.ModelSerializer):
     class Meta:
         model = Turno
         fields = [
-            "id","fecha", "hora", "estado", "estado_paciente",# "fecha_estado_paciente",
+            "id","fecha", "hora", "estado", "estado_paciente", "fecha_estado_paciente",
             "msj_recordatorio", "msj_confirmado", "msj_cancelado", "msj_reprogramado",
             "efe_ser_esp",
             "paciente_nombre", "paciente_apellido", "paciente_dni",
@@ -438,7 +437,6 @@ class TurnoMergedSerializer(serializers.ModelSerializer):
         
         dic = []
         for m in mensajes:
-            print(m)
             if m.id_estado_id >= 0 and m.id_estado_id < 3:
                 update_msg_state(m)
             dic.append({
@@ -461,7 +459,7 @@ class TurnoMergedSerializer(serializers.ModelSerializer):
                 "fecha_last_ack": m.fecha_last_ack if m.fecha_last_ack else None,
             })
         return dic
-    '''
+    
     def get_fecha_estado_paciente(self, obj):
         flow_ids = TurnoFlow.objects.filter(id_turno=obj.id).values_list("id_flow", flat=True)
 
@@ -480,7 +478,7 @@ class TurnoMergedSerializer(serializers.ModelSerializer):
             .first()
         )
         return flow.fecha_inicio if flow else None
-'''
+
 
 
 

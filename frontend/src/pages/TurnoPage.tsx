@@ -246,10 +246,6 @@ export default function TurnosPage() {
   // cuando cambio la categoria activa y estoy en alertMode y ya tengo appliedFilters (la búsqueda se lanza solo con Buscar)
   useEffect(() => {
     if (!alertMode) return;
-    // si querés que al cambiar categoría se actualice la tabla sin presionar Buscar, podés descomentar la siguiente línea:
-    // loadPage({ page: 1, useErrorMode: false, filters: appliedFilters });
-    // por ahora respetamos la regla: la búsqueda solo se ejecuta con Buscar
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeAlertCategory, alertMode]);
 
   // ---------- page change ----------
@@ -416,6 +412,7 @@ export default function TurnosPage() {
         return (
           <TableCell key={columnKey} sx={cellSx(160)}>
             <Chip size="small" label={estadoRespChipLabel(t)} color={estadoRespChipColor(t) as any} variant="outlined"  />
+            {t.fecha_estado_paciente? <DateTimeStack iso={t.fecha_estado_paciente} /> : null}
           </TableCell>
         );
       case 'dni': return <TableCell key={columnKey} sx={cellSx(140)}>{wrapTypography(t.paciente_dni ?? '—')}</TableCell>;

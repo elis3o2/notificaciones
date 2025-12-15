@@ -62,7 +62,7 @@ async def parse_request_json(request: web.Request):
 # --------- DB helpers that run in thread ----------
 # Todas las llamadas ORM se ejecutan con asyncio.to_thread
 
-async def get_or_create_flow(pk, para=None, desde=None):
+async def get_or_create_flow(pk:str, para: str, sesion: str) -> Flow:
     """
     Devuelve la instancia Flow existente o la crea si no existe.
     """
@@ -73,7 +73,7 @@ async def get_or_create_flow(pk, para=None, desde=None):
             defaults={
                 "id_plantilla_flow_id": 1,
                 "para": para,
-                "desde": "5493416082860",
+                "id_sesion_id": sesion,
                 "id_estado_id": 0,
                 "fecha_inicio": datetime.now(tz=ARG_TZ).replace(tzinfo=None)
             },
@@ -179,7 +179,6 @@ async def handle_finish(id_flow_pk, plantilla_name=None):
 
         return {"ok": True}
 
-    # **ESTA LÍNEA FALTABA**: ejecutar el trabajo en un thread para no bloquear el loop
     result = await asyncio.to_thread(_)
     logger.info("handle_finish finished for flow %s result=%s", id_flow_pk, result)
     return result
@@ -229,7 +228,7 @@ async def handler(request: web.Request):
     node_name = data.get("nodeId") or None
     flow_name = data.get("flow") or None
     to = data.get("to")
-    from_ = data.get("from")
+    sesion = data.get("session")
 
     # Validaciones básicas
     if id_ is None:
@@ -238,7 +237,7 @@ async def handler(request: web.Request):
 
     try:
         # Asegura que exista el Flow (lo obtiene o lo crea) — esto corre en thread
-        flow = await get_or_create_flow(id_, para=to, desde=from_)
+        flow = await get_or_create_flow(id_, para=to, sesion=sesion)
 
         if evento == "flow_finished" or evento == "error":
             await set_flow_estado(id_, 1, fecha_hora)

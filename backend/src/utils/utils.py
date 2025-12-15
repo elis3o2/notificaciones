@@ -1,7 +1,7 @@
 import requests
 import emoji
 from decouple import config
-from src.models import EfeSerEspPlantilla, Mensaje, Flow, TurnoFlow, Turno, Plantilla
+from src.models import EfeSerEspPlantilla, Mensaje, Flow, TurnoFlow, Turno, Plantilla, TurnoEspera
 import re
 import logging
 logger = logging.getLogger(__name__)
@@ -10,71 +10,103 @@ from rest_framework import status
 from django.utils.timezone import now
 from django.db import connections, DatabaseError
 from datetime import timedelta, datetime, date, time
+from .querys_informix import query_profesional_from_id,query_profesional_from_nombre, query_paciente
 
 
 
-def update_msg_state(mensaje: Mensaje):
+def update_msg_state(mensaje: Mensaje) -> Mensaje:
     """
     Consulta la API externa por el estado del mensaje y actualiza Mensaje(pk=mensaje_id).
-    Devuelve exactamente lo que devuelve la API externa.
+    Devuelve el Mensaje actualizado o el original si hay error.
     """
     api_url = config("API_ESTADO_WHATSAPP")
-    params = {"numero": mensaje.numero, "id": mensaje.id_mensaje}
+    params = {
+        "session": mensaje.id_sesion_id,
+        "numero": mensaje.numero,
+        "id": mensaje.id_mensaje
+    }
+
+    session = requests.Session()
+    session.trust_env = False 
+
     try:
-        resp = requests.get(api_url, params=params, timeout=2)
+        resp = session.get(
+            api_url,
+            params=params,
+            headers={
+                "Accept": "application/json"
+            },
+            timeout=5
+        )
+
+        content_type = resp.headers.get("Content-Type", "")
+
+        if "application/json" not in content_type:
+            return mensaje
+
         data = resp.json()
 
-    except:
+    except requests.exceptions.RequestException:
+        return mensaje
+    except ValueError:
         return mensaje
 
     # Actualizar Mensaje local si existe
     try:
         mensaje.fecha_last_ack = now()
-        if "ack" in data:
-            mensaje.id_estado_id = data["ack"]  # asumimos que id_estado es FK a id de estado
+        if isinstance(data, dict) and "ack" in data:
+            mensaje.id_estado_id = data["ack"]
+
         mensaje.save(update_fields=["fecha_last_ack", "id_estado"])
         return mensaje
-    except:
+
+    except Exception:
         return mensaje
 
 
-def enviar_whatsapp(numero, mensaje):
-    """
-    Envía un mensaje WhatsApp usando la API externa y devuelve la respuesta directa del servidor
-    """
-    api_url = config('API_WHATSAPP') 
-    
-    # Preparar datos para la API externa (form-data)
-    payload = {
-        "numero": numero,
-        "texto": mensaje
-    }
+
+def enviar_whatsapp(numero: str, mensaje: str) -> Response:
+    api_url = config('API_WHATSAPP')
+
+    session = requests.Session()
+    session.trust_env = False  # ← clave
 
     try:
-        # Realizar solicitud a la API externa
-        response = requests.post(api_url, data=payload)
-        
-        # Devolver la respuesta directa del servidor externo
-        # Incluyendo el código de estado y el contenido
-        return Response(
-            data=response.json(),
-            status=response.status_code
+        response = session.post(
+            api_url,
+            json={
+                "numero": numero,
+                "texto": mensaje
+            },
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            },
+            timeout=15
         )
-        
-    except requests.exceptions.RequestException as e:
-        # En caso de error de conexión
+
+        content_type = response.headers.get("Content-Type", "")
+
+        if "application/json" in content_type:
+            return Response(response.json(), status=response.status_code)
+
         return Response(
-            {"error": f"No se pudo conectar con el servicio de WhatsApp: {str(e)}"},
-            status=status.HTTP_503_SERVICE_UNAVAILABLE
-        )
-    except ValueError as e:
-        # En caso de que la respuesta no sea JSON válido
-        return Response(
-            {"error": f"Respuesta inválida del servidor: {str(e)}", "raw_response": response.text},
+            {
+                "error": "Respuesta no JSON desde la API WhatsApp",
+                "status_code": response.status_code,
+                "raw_response": response.text[:500]
+            },
             status=status.HTTP_502_BAD_GATEWAY
         )
+
+    except requests.exceptions.RequestException as e:
+        return Response(
+            {"error": "No se pudo conectar con la API WhatsApp", "detail": str(e)},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE
+        )
+
     
-def check_turno(efe_ser_esp, estado):
+def check_turno(efe_ser_esp: int, estado: int) -> (bool, Plantilla | None):
     try:
         turno = EfeSerEspPlantilla.objects.filter(
             id_efe_ser_esp=efe_ser_esp,
@@ -108,7 +140,7 @@ def check_turno(efe_ser_esp, estado):
 
 
 
-def format_plantilla(contenido, valores):
+def format_plantilla(contenido: str, valores) -> str:
     """
     Reemplaza placeholders en la plantilla con valores reales
     Ejemplo: {nompac} -> Juan
@@ -127,34 +159,18 @@ def fetch_paciente(id_persona=None, dni=None):
     """
     if not id_persona and not dni:
         return []
-
+    id: bool
     if id_persona:
-        where = "WHERE per.id_persona = ?"
+        id = True
         params = (id_persona,)
     else:
-        where = "WHERE per.nro_doc = ?"
+        id = False
         params = (dni,)
 
-    sql = f"""
-        SELECT
-            per.id_persona AS id,
-            per.nro_doc,
-            TRIM(per.nombre_per) AS nombre,
-            TRIM(per.apellido)    AS apellido,
-            per.carac_telef,
-            per.nro_telef,
-            per.fe_naci AS fecha_nacimiento,
-            per.sexo,
-            TRIM(calle.nom_calle) AS nombre_calle,
-            per.numero_dec AS numero_calle
-        FROM v_personas per
-        LEFT JOIN v_calles calle ON calle.cod_calle = per.cod_calle_dec
-        {where}
-    """
 
     try:
         with connections['informix'].cursor() as cur:
-            cur.execute(sql, params)
+            cur.execute(query_paciente(id), params)
             rows = cur.fetchall()
             if not rows:
                 return []
@@ -178,37 +194,17 @@ def fetch_profesional(id_prof=None, id_efector=None, nombre=None, apellido=None)
     """
     params = []
     if id_prof:
-        sql = """
-            SELECT DISTINCT
-                p.idpersonal AS id,
-                TRIM(p.apellido) AS apellido,
-                TRIM(p.nombre)   AS nombre
-            FROM personal p
-            WHERE p.idpersonal = ?
-        """
+        sql = query_profesional_from_id()
         params = [id_prof]
     else:
         if not id_efector:
             return []
-        sql = """
-            SELECT DISTINCT
-                p.idpersonal AS id,
-                TRIM(p.apellido) AS apellido,
-                TRIM(p.nombre)   AS nombre
-            FROM personal p
-            JOIN personalefector pe ON p.idpersonal = pe.idpersonal
-            WHERE pe.idefector = ?
-              AND p.estado = 1
-        """
+        sql = query_profesional_from_nombre(id_efector, nombre, apellido)
         params = [id_efector]
-        if nombre and nombre.strip():
-            sql += " AND p.nombre LIKE ?"
+        if nombre:
             params.append(nombre.strip().upper() + '%')
-        if apellido and apellido.strip():
-            sql += " AND p.apellido LIKE ?"
+        if apellido:
             params.append(apellido.strip().upper() + '%')
-
-        sql += " ORDER BY apellido, nombre"
 
     try:
         with connections['informix'].cursor() as cur:
@@ -229,7 +225,7 @@ def fetch_profesional(id_prof=None, id_efector=None, nombre=None, apellido=None)
         raise
 
 
-def start_flow(numero,flowName):
+def start_flow(numero: str, flowName: str) -> Response:
     api_url = config('API_WHATSAPP_FLOW') 
     
     port = config('LISTEN_PORT')
@@ -268,12 +264,12 @@ def start_flow(numero,flowName):
     
 
 
-def update_estado_Turno(id_sisr: int, id_pac: int, id_est) -> Turno | None: 
+def update_estado_Turno(id_sisr: int, id_pac: int, id_est: int) -> Turno | None: 
     try:
         # Obtener instancia
         t = Turno.objects.filter(id_sisr=id_sisr, id_paciente=id_pac).first()
         if t is None:
-            print(f"[DEBUG] No existe Turno local con id={id_sisr} => se ignora notificación (estado={estado})")
+            print(f"[DEBUG] No existe Turno local con id={id_sisr} => se ignora notificación (estado={id_est})")
             return None
 
         # Asignar estado en la instancia y guardar (mínimo)
@@ -306,15 +302,104 @@ def create_Turno(id_sisr: int, id_pac: int, id_est: int,
     return t
 
 
-def create_Mensaje(id: str|None, turno: Turno, numero: str | None,
-                plantilla: Plantilla, estado: int) -> None:
+def create_Mensaje(id: str | None, turno: Turno, numero: str | None,
+                plantilla: Plantilla, estado: int, fecha: datetime| None, sesion: str | None) -> None:
+    if fecha == None:
+        fecha = datetime.now()
+
     Mensaje.objects.create(
         id_mensaje=id,
         id_turno=turno,
         numero=numero,
         id_plantilla=plantilla,
-        fecha_envio=datetime.now(),
+        fecha_envio=fecha,
         id_estado_id=estado,
+        id_sesion_id=sesion
     )
 
+
+
+def sacar_Turno_Espera(id_pac: int, id_efe_ser_esp: int) -> bool:
+    updated = TurnoEspera.objects.filter(
+        id_paciente=id_pac,
+        id_efe_ser_esp=id_efe_ser_esp,
+        id_estado_id=0
+    ).update(id_estado_id=1, fecha_hora_cierre=now())
+
+    return updated > 0
+
+
+
     
+def map_estdo(est: int) -> int:
+    if est == 3:
+        estado = 1
+    elif est in (4, 5, 6):
+        estado = 4
+    elif est in (1, 2, 7):
+        estado = 2
+    elif est == 8:
+        estado = 3
+    return estado
+
+
+def decode_res(res: Response) -> int:
+    match res.status_code:
+        case 503:
+            ack = -5
+        case 400:
+            ack = -4
+        case 404:
+            ack = -3
+        case 422:
+            ack = -2
+        case 500:
+            ack = -1
+        case _:  
+            response_data = getattr(res, "data", {})
+            ack = int(response_data.get("ack", -5)) 
+
+    return ack
+
+
+
+def create_flow(telefono: str, turno: Turno ) -> None:
+    try:
+        res = start_flow(telefono, "confirmacion-turno")
+    except Exception as ex:
+        print(f"[ERROR] start_flow falla para turno {id_turno}: {ex}")
+        return
+
+    status_code = getattr(res, "status_code", None)
+    body = getattr(res, "data", {}) or {}
+    if status_code == 200 and isinstance(body, dict):
+        flow_pk = body.get("id")
+        plantilla_flow = PlantillaFlow.objects.get(pk=1)
+        sesion=body.get("id", None)
+        if flow_pk:
+            f, created = Flow.objects.get_or_create(
+                pk=flow_pk,
+                defaults={
+                    "id_plantilla_flow": plantilla_flow,
+                    "para": telefono,
+                    "sesion_id": sesion,
+                    "id_estado_id": 0,
+                    "fecha_inicio": timezone.now()
+                },
+            )
+            # si ya existía y querés forzar estado a 0:
+            if not created and f.id_estado_id != 0:
+                f.id_estado_id = 0
+                f.save(update_fields=["id_estado_id"])
+
+            # crear TurnoFlow idempotente
+            TurnoFlow.objects.get_or_create(id_turno=turno, id_flow=f)
+
+            # actualizar estado paciente
+            turno.id_estado_paciente_id = 4
+            turno.save(update_fields=["id_estado_paciente"])
+    else:
+        ack = decode_res(res)
+        if ack < 0:
+            turno.id_estado_paciente_id = ack
+            turno.save(update_fields=["id_estado_paciente"])

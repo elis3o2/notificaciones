@@ -2767,6 +2767,17 @@ reprogramacion, cancelacion, recordatorio) VALUES
 
 
 
+INSERT INTO sesion (id, numero) VALUES
+('a', '3416082860'),
+('b', '3415946508'),
+('c', '3416246504'),
+('d', '3416276529'),
+('e', '3416357426'),
+('f', '3416369588'),
+('g', '3416371005'),
+('h', '3416387778'),
+('i', '3416389015'),
+('j', '3416686584');
 
 
 INSERT INTO estado_turno_espera (id, significado)VALUES

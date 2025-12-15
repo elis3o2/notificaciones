@@ -14,7 +14,6 @@ from collections import OrderedDict
 from src.models import (Plantilla,  EstadoMsj, EstadoTurno, Turno, TurnoEspera, Deriva,
                         Mensaje, Efector,Servicio, Especialidad, EfeSerEspPlantilla,
                         EfeSerEsp, EstudioRequerido, Flow, TurnoFlow)
-
 from src.serializers import(PlantillaSerializer, EstadoMsjSerializer, EstadoTurnoSerializer,
                 TurnoSerializer, TurnoEsperaSerializer, MensajeSerializer, DerivaSerializer,
                 EfectorSerializer, ServicioSerializer,EspecialidadSerializer, EfeSerEspPlantillaSerializer, EfeSerEspPlantillaDetailSerializer,
@@ -24,6 +23,7 @@ from src.serializers import(PlantillaSerializer, EstadoMsjSerializer, EstadoTurn
                 EstudioRequeridoSerializer )
 from typing import List
 from src.utils.utils import enviar_whatsapp, fetch_paciente, fetch_profesional
+from src.utils.querys_informix import query_turno_historico_paciente, query_turnos, query_eliminado
 import logging
 logger = logging.getLogger(__name__)
 
@@ -57,7 +57,7 @@ class TurnoViewSet(viewsets.ModelViewSet):
         """
         Devuelve una lista de ints a partir de un query param tipo '1,2,3'
         o None si no existe / no hay valores válidos.
-        Ignores non-integer values (para ser tolerante).
+        Ignores non-integer values.
         """
         val = self.request.query_params.get(name)
         if not val:
@@ -99,7 +99,7 @@ class TurnoViewSet(viewsets.ModelViewSet):
 
 
     @action(detail=False, methods=["get"], url_path="count")
-    def count(self, request):
+    def count(self, request) -> Response:
         """
         Devuelve un JSON con el conteo de turnos según los filtros pasados,
         y además el conteo de cuántos tienen activadas las banderas:
@@ -108,8 +108,6 @@ class TurnoViewSet(viewsets.ModelViewSet):
           - msj_reprogramacion
           - msj_confirmacion
 
-        Ejemplo:
-          GET /turnos/count/?id_estado=0&id_servicio=1,2&efectores=5,7
         """
         qs = self.filter_queryset(self.get_queryset())  # aplica filtros DRF si los hay
 
@@ -174,7 +172,7 @@ class EfeSerEspViewSet(viewsets.ModelViewSet):
 
 
     @action(detail=False, methods=["get"], url_path="servicios")
-    def servicios_por_efector(self, request):
+    def servicios_por_efector(self, request) -> Response:
         id_efector = request.query_params.get("id_efector")
 
         if not id_efector:
@@ -201,7 +199,7 @@ class EfeSerEspViewSet(viewsets.ModelViewSet):
 
 
     @action(detail=False, methods=["get"], url_path="ser_esp")
-    def serv_esp_por_efector(self, request):
+    def serv_esp_por_efector(self, request) -> Response:
         id_efector = request.query_params.get("id_efector")
         if not id_efector:
             return Response({"detail": "Debe enviar id_efector como query param"}, status=400)
@@ -255,7 +253,7 @@ class EfeSerEspViewSet(viewsets.ModelViewSet):
 
 
     @action(detail=False, methods=["get"], url_path="efectores")
-    def get_efectores(self, request):
+    def get_efectores(self, request) -> Response:
         id_servicio = request.query_params.get("id_ser")
         id_especialidad = request.query_params.get("id_esp")
 
@@ -276,7 +274,7 @@ class EfeSerEspViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_200_OK)
     
     @action(detail=False, methods=["get"], url_path="id")
-    def get_id(self, request):
+    def get_id(self, request) -> Response:
         id_efector = request.query_params.get("efector")
         id_servicio = request.query_params.get("servicio")
         id_especialidad = request.query_params.get("especialidad")
@@ -312,7 +310,7 @@ class EfeSerEspPlantillaViewSet(viewsets.ModelViewSet):
     serializer_class = EfeSerEspPlantillaDetailSerializer
 
     @action(detail=False, methods=["get"], url_path="buscar")
-    def search(self, request):
+    def search(self, request) -> Response:
         id_efector = request.query_params.get("id_efector")
         id_servicio = request.query_params.get("id_servicio")
 
@@ -326,7 +324,7 @@ class EfeSerEspPlantillaViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     @action(detail=False, methods=["get"], url_path="detalle")
-    def search_detalle(self, request):
+    def search_detalle(self, request) -> Response:
         id_efector = request.query_params.get("id_efector")
         id_servicio = request.query_params.get("id_servicio")
 
@@ -362,7 +360,7 @@ class TurnoEsperaViewSet(viewsets.ModelViewSet):
     serializer_class = TurnoEsperaSerializer
 
     @action(detail=False, methods=["get"], url_path="espera")
-    def search_detalle(self, request):
+    def search_detalle(self, request) -> Response:
         id_efector = request.query_params.get("id_efector")
 
         queryset = self.get_queryset().filter(id_estado=0)
@@ -419,24 +417,6 @@ class TurnoEsperaViewSet(viewsets.ModelViewSet):
 
         return Response(out.data, status=status.HTTP_201_CREATED)
 
-    
-    @action(detail=False, methods=["post"], url_path="close")
-    def close_turno(self, request):
-        id = request.query_params.get("id")
-        turno = self.get_queryset().get(pk=id)
-        serializer = TurnoEsperaCloseSerializer(
-            turno,
-            data={},  # no hace falta pasar nada más
-            context={"request": request},
-            partial=True,
-        )
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(
-            TurnoEsperaSerializer(turno, context={"request": request}).data,
-            status=status.HTTP_200_OK
-        )
-
         
 
 class EstudioRequeridoViewSet(viewsets.ModelViewSet):
@@ -475,7 +455,7 @@ class GetPacienteAPIView(APIView):
     Si se pasa 'id' devuelve solo un objeto (como mejora; pero preferimos usar GetPacienteDetail para id).
     Aquí se usa para búsquedas por filtros (no-id).
     """
-    def get(self, request):
+    def get(self, request) -> Response:
         id_persona = request.query_params.get('id')
         dni = request.query_params.get('dni')
 
@@ -512,11 +492,11 @@ class GetProfesionalAPIView(APIView):
     GET /api/profesionales/?id=...  OR ?id_efe=...&nombre=...&apellido=...
     Si se pasa id devuelve un único profesional; si no, devuelve todos los que coincidan con id_efe y filtros.
     """
-    def get(self, request):
+    def get(self, request) -> Response:
         try:
-            id_prof = request.query_params.get('id')
-            id_efector = request.query_params.get('id_efector')
-            nombre = request.query_params.get('nombre')
+            id_prof: str | None = request.query_params.get('id')
+            id_efector: str | None = request.query_params.get('id_efector')
+            nombre: str | None = request.query_params.get('nombre')
             apellido = request.query_params.get('apellido')
 
             if id_prof:
@@ -546,72 +526,15 @@ class GetProfesionalAPIView(APIView):
 
 
 class HistoricoPaciente(APIView):
-    def get(self, request):
+    def get(self, request) -> Response:
         dni = request.query_params.get('dni')
         if not dni:
             return Response({"detail": "Parámetro 'dni' requerido."}, status=status.HTTP_400_BAD_REQUEST)
 
-        sql = """
-            (SELECT 
-                th.idturno, 
-                th.fecha_hora_mdf, 
-                es.descripcion AS estado,
-                TRIM(per.nombre_per) AS paciente_nombre, 
-                TRIM(per.apellido) AS paciente_apellido,
-                per.nro_doc, 
-                TRIM(p.nombre) AS nombre_profesional, 
-                TRIM(p.apellido) AS apellido_profesional,
-                t.fecha, 
-                t.hora,
-                efe.nombre AS efector, 
-                s.descripcion AS servicio, 
-                esp.descripcion AS especialidad
-            FROM turnoshistorico th
-            JOIN turnos t ON th.idturno = t.idturno
-            JOIN turnosestado es on es.idestadoturno = th.idestadoturno
-            JOIN personalefector pe ON pe.idpersonalefector = t.idpersonalefector
-            JOIN personal p ON p.idpersonal = pe.idpersonal
-            JOIN efectores efe ON efe.idefector = pe.idefector
-            JOIN efectorservesp ese ON ese.idefecservesp = t.idefecservesp
-            JOIN especialidadesserv se ON se.idespecialidadserv = ese.idespecialidadserv
-            JOIN servicios s ON s.idservicio = se.idservicio
-            JOIN especialidades esp ON esp.idespecialidad = se.idespecialidad
-            JOIN v_personas per ON per.id_persona = th.idpaciente
-            WHERE per.nro_doc = ?
-        )
-        UNION ALL
-        (
-            SELECT 
-                te.idturno, 
-                te.fecha_hora_elim AS fecha_hora_mdf,
-                'ELIMINADO' AS estado,
-                TRIM(per.nombre_per) AS paciente_nombre, 
-                TRIM(per.apellido) AS paciente_apellido,
-                per.nro_doc, 
-                TRIM(p.nombre) AS nombre_profesional, 
-                TRIM(p.apellido) AS apellido_profesional,
-                te.fecha, 
-                te.hora,
-                efe.nombre AS efector, 
-                s.descripcion AS servicio, 
-                esp.descripcion AS especialidad
-            FROM turnoselimresp te
-            JOIN personalefector pe ON pe.idpersonalefector = te.idpersonalefector
-            JOIN personal p ON p.idpersonal = pe.idpersonal
-            JOIN efectores efe ON efe.idefector = pe.idefector
-            JOIN efectorservesp ese ON ese.idefecservesp = te.idefecservesp
-            JOIN especialidadesserv se ON se.idespecialidadserv = ese.idespecialidadserv
-            JOIN servicios s ON s.idservicio = se.idservicio
-            JOIN especialidades esp ON esp.idespecialidad = se.idespecialidad
-            JOIN v_personas per ON per.id_persona = te.idpaciente
-            WHERE per.nro_doc = ?
-        )
-        ORDER BY fecha_hora_mdf DESC
-        """
 
         try:
             with connections['informix'].cursor() as cur:
-                cur.execute(sql, (dni, dni))
+                cur.execute(query_turno_historico_paciente(), (dni, dni))
                 rows = cur.fetchall()
 
                 # Si no hay filas, devolvemos array vacío (evitamos operar sobre cur.description None)
@@ -653,7 +576,7 @@ class HistoricoPaciente(APIView):
 
 class GetIncorrectoAPIView(APIView):
 
-    def get(self, request):
+    def get(self, request) -> Response:
         cantidad = int(request.query_params.get('cantidad'))  # nuevo: cantidad a devolver
         efectores_param = request.query_params.getlist('efectores[]')
         servicios_param = request.query_params.getlist('servicios[]')
@@ -720,102 +643,32 @@ class GetIncorrectoAPIView(APIView):
         try:
             with connections['informix'].cursor() as cur:
 
-                if len(ids_list) == 1:
-                    where_clause1 = "WHERE t.idturno = ?"
-                    where_clause2 = "WHERE te.idturno = ?"
-                else:
-                    placeholders = ",".join(["?"] * len(ids_list))
-                    where_clause1 = f"WHERE t.idturno IN ({placeholders})"
-                    where_clause2 = f"WHERE te.idturno IN ({placeholders})"
-
-                sql1 = f"""
-                    SELECT t.idturno, t.idpaciente AS paciente_id, TRIM(per.nombre_per) AS paciente_nombre, TRIM(per.apellido) AS paciente_apellido,
-                    per.nro_doc, TRIM(p.nombre) AS nombre_profesional, TRIM(p.apellido) AS apellido_profesional
-                    FROM turnos t
-                    JOIN personalefector pe ON pe.idpersonalefector = t.idpersonalefector
-                    JOIN personal p ON p.idpersonal = pe.idpersonal
-                    JOIN v_personas per ON per.id_persona = t.idpaciente
-                    {where_clause1}
-                """
-                sql2 = f"""
-                    SELECT te.idturno, te.idpaciente AS paciente_id, TRIM(per.nombre_per) AS paciente_nombre, TRIM(per.apellido) AS paciente_apellido,
-                    per.nro_doc, TRIM(p.nombre) AS nombre_profesional, TRIM(p.apellido) AS apellido_profesional
-                    FROM turnoselimresp te
-                    JOIN personalefector pe ON pe.idpersonalefector = te.idpersonalefector
-                    JOIN personal p ON p.idpersonal = pe.idpersonal
-                    JOIN v_personas per ON per.id_persona = te.idpaciente
-                    {where_clause2}
-                """
-
-                # params como tupla de strings (o ints) — Informix/jdbc maneja ambas
-                params = tuple(ids_list)
-
                 # ejecutar sql1
-                try:
-                    cur.execute(sql1, params)
-                    rows = cur.fetchall()
-                    for row in rows:
-                        turno_id = str(row[0])
-                        ext_map_asig[turno_id] = {
-                            'paciente_id': row[1],
-                            'paciente_nombre': row[2],
-                            'paciente_apellido': row[3],
-                            'paciente_dni': row[4],
-                            'profesional_nombre': row[5],
-                            'profesional_apellido': row[6],
-                        }
-                except Exception as ex:
-                    logger.exception("Error ejecutando sql1 Informix (GetIncorrectoAPIView). SQL: %s Params: %s Exception: %s", sql1, params, ex)
-                    # reintento simple si sólo hay 1 id
-                    if len(params) == 1:
-                        try:
-                            cur.execute(sql1.replace(f"IN ({placeholders})", "= ?"), (params[0],))
-                            rows = cur.fetchall()
-                            for row in rows:
-                                turno_id = str(row[0])
-                                ext_map_asig[turno_id] = {
-                                    'paciente_id': row[1],
-                                    'paciente_nombre': row[2],
-                                    'paciente_apellido': row[3],
-                                    'paciente_dni': row[4],
-                                    'profesional_nombre': row[5],
-                                    'profesional_apellido': row[6],
-                                }
-                        except Exception:
-                            logger.exception("Reintento simple sql1 falló (GetIncorrectoAPIView)")
-
-                # ejecutar sql2
-                try:
-                    cur.execute(sql2, params)
-                    rows = cur.fetchall()
-                    for row in rows:
-                        turno_id = str(row[0])
-                        ext_map_elim[turno_id] = {
-                            'paciente_id': row[1],
-                            'paciente_nombre': row[2],
-                            'paciente_apellido': row[3],
-                            'paciente_dni': row[4],
-                            'profesional_nombre': row[5],
-                            'profesional_apellido': row[6],
-                        }
-                except Exception as ex:
-                    logger.exception("Error ejecutando sql2 Informix (GetIncorrectoAPIView). SQL: %s Params: %s Exception: %s", sql2, params, ex)
-                    if len(params) == 1:
-                        try:
-                            cur.execute(sql2.replace(f"IN ({placeholders})", "= ?"), (params[0],))
-                            rows = cur.fetchall()
-                            for row in rows:
-                                turno_id = str(row[0])
-                                ext_map_elim[turno_id] = {
-                                    'paciente_id': row[1],
-                                    'paciente_nombre': row[2],
-                                    'paciente_apellido': row[3],
-                                    'paciente_dni': row[4],
-                                    'profesional_nombre': row[5],
-                                    'profesional_apellido': row[6],
-                                }
-                        except Exception:
-                            logger.exception("Reintento simple sql2 falló (GetIncorrectoAPIView)")
+                cur.execute(query_turnos(len(ids_list)), ids_list)
+                rows = cur.fetchall()
+                for row in rows:
+                    turno_id = str(row[0])
+                    ext_map_asig[turno_id] = {
+                        'paciente_id': row[1],
+                        'paciente_nombre': row[2],
+                        'paciente_apellido': row[3],
+                        'paciente_dni': row[4],
+                        'profesional_nombre': row[5],
+                        'profesional_apellido': row[6],
+                    }
+                
+                cur.execute(query_eliminado(len(ids_list)), ids_list)
+                rows = cur.fetchall()
+                for row in rows:
+                    turno_id = str(row[0])
+                    ext_map_elim[turno_id] = {
+                        'paciente_id': row[1],
+                        'paciente_nombre': row[2],
+                        'paciente_apellido': row[3],
+                        'paciente_dni': row[4],
+                        'profesional_nombre': row[5],
+                        'profesional_apellido': row[6],
+                    }
 
         except DatabaseError:
             logger.exception("Error consultando Informix (GetIncorrectoAPIView)")
@@ -918,36 +771,7 @@ class TurnosMergedAllAPIView(APIView):
         ext_map_elim = {}
         try:
             with connections['informix'].cursor() as cur:
-
-                if len(ids_list) == 1:
-                    where_clause1 = "WHERE t.idturno = ?"
-                    where_clause2 = "WHERE te.idturno = ?"
-                else:
-                    placeholders = ",".join(["?"] * len(ids_list))
-                    where_clause1 = f"WHERE t.idturno IN ({placeholders})"
-                    where_clause2 = f"WHERE te.idturno IN ({placeholders})"
-
-
-                sql1 = f"""
-                    SELECT t.idturno, t.idpaciente AS paciente_id, TRIM(per.nombre_per) AS paciente_nombre, TRIM(per.apellido) AS paciente_apellido,
-                    per.nro_doc, TRIM(p.nombre) AS nombre_profesional, TRIM(p.apellido) AS apellido_profesional
-                    FROM turnos t
-                    JOIN personalefector pe ON pe.idpersonalefector = t.idpersonalefector
-                    JOIN personal p ON p.idpersonal = pe.idpersonal
-                    JOIN v_personas per ON per.id_persona = t.idpaciente           
-                    {where_clause1}
-                """ 
-                sql2 = f"""   
-                    SELECT te.idturno,te.idpaciente AS paciente_id, TRIM(per.nombre_per) AS paciente_nombre, TRIM(per.apellido) AS paciente_apellido,
-                    per.nro_doc, TRIM(p.nombre) AS nombre_profesional, TRIM(p.apellido) AS apellido_profesional
-                    FROM turnoselimresp te
-                    JOIN personalefector pe ON pe.idpersonalefector = te.idpersonalefector
-                    JOIN personal p ON p.idpersonal = pe.idpersonal
-                    JOIN v_personas per ON per.id_persona = te.idpaciente           
-                    {where_clause2}                
-                """
-
-                cur.execute(sql1, ids_list)
+                cur.execute(query_turnos(len(ids_list)), ids_list)
                 rows = cur.fetchall()
                 for row in rows:
                     turno_id = str(row[0])
@@ -959,8 +783,7 @@ class TurnosMergedAllAPIView(APIView):
                         'profesional_nombre': row[5],
                         'profesional_apellido': row[6],
                     }
-                
-                cur.execute(sql2, ids_list)
+                cur.execute(query_eliminado(len(ids_list)), ids_list)
                 rows = cur.fetchall()
                 for row in rows:
                     turno_id = str(row[0])
@@ -1087,26 +910,7 @@ class TurnosAlertasAPIView(APIView):
             try:
                 if ids_list:
                     with connections['informix'].cursor() as cur:
-
-                        if len(ids_list) == 1:
-                            where_clause1 = "WHERE t.idturno = ?"
-                            where_clause2 = "WHERE te.idturno = ?"
-                        else:
-                            placeholders = ",".join(["?"] * len(ids_list))
-                            where_clause1 = f"WHERE t.idturno IN ({placeholders})"
-                            where_clause2 = f"WHERE te.idturno IN ({placeholders})"
-
-                        sql1 = f"""
-                            SELECT t.idturno, t.idpaciente AS paciente_id, TRIM(per.nombre_per) AS paciente_nombre, TRIM(per.apellido) AS paciente_apellido,
-                            per.nro_doc, TRIM(p.nombre) AS nombre_profesional, TRIM(p.apellido) AS apellido_profesional
-                            FROM turnos t
-                            JOIN personalefector pe ON pe.idpersonalefector = t.idpersonalefector
-                            JOIN personal p ON p.idpersonal = pe.idpersonal
-                            JOIN v_personas per ON per.id_persona = t.idpaciente
-                            {where_clause1}
-                        """
-
-                        cur.execute(sql1, ids_list)
+                        cur.execute(query_turnos(len(ids_list)), ids_list)
                         rows = cur.fetchall()
                         for row in rows:
                             turno_id = str(row[0])

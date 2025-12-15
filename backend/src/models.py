@@ -128,12 +128,22 @@ class Turno(models.Model):
         db_table = 'turno'
 
 
+class Sesion(models.Model):
+    id = models.CharField(max_length=3, primary_key=True)
+    numero = models.CharField(max_length=16)
+
+    class Meta:
+        managed = False
+        db_table = 'sesion'
+
 class Mensaje(models.Model):
     id = models.AutoField(primary_key=True)
     id_mensaje = models.CharField(max_length=40, null=True, blank=True)
     id_turno = models.ForeignKey(
         Turno, models.DO_NOTHING, db_column='id_turno', null=True, blank=True)
     numero = models.CharField(max_length=20)
+    id_sesion = models.ForeignKey(
+        Sesion, models.DO_NOTHING, db_column='id_sesion', null=True, blank=True)
     id_plantilla = models.ForeignKey(
         Plantilla, models.DO_NOTHING, db_column='id_plantilla')
     fecha_envio = models.DateTimeField()
