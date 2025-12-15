@@ -72,7 +72,7 @@ async def get_or_create_flow(pk:str, para: str, sesion: str) -> Flow:
             pk=pk,
             defaults={
                 "id_plantilla_flow_id": 1,
-                "para": para,
+                "numero": para,
                 "id_sesion_id": sesion,
                 "id_estado_id": 0,
                 "fecha_inicio": datetime.now(tz=ARG_TZ).replace(tzinfo=None)

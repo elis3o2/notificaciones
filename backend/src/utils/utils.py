@@ -381,7 +381,7 @@ def create_flow(telefono: str, turno: Turno ) -> None:
                 pk=flow_pk,
                 defaults={
                     "id_plantilla_flow": plantilla_flow,
-                    "para": telefono,
+                    "numero": telefono,
                     "sesion_id": sesion,
                     "id_estado_id": 0,
                     "fecha_inicio": timezone.now()
