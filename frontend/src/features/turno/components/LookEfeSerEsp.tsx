@@ -99,7 +99,11 @@ export default function LookEfeSerEsp({
           const srv = dv.servicio_deriva;
           if (!serviciosMap.has(srv.id)) serviciosMap.set(srv.id, srv);
         });
-        setServicios(Array.from(serviciosMap.values()));
+        setServicios(
+          Array.from(serviciosMap.values()).sort((a, b) =>
+            a.nombre.localeCompare(b.nombre, "es", { sensitivity: "base" })
+          )
+        );
       } catch (e: any) {
         console.error(e);
         setError(
@@ -138,8 +142,14 @@ export default function LookEfeSerEsp({
           esp_nombre: e.esp_nombre,
         })
       );
-      const uniqueEps = Array.from(new Map(eps.map((x) => [x.id, x])).values());
+      const uniqueEps = Array.from(
+        new Map(eps.map((x) => [x.id, x])).values()
+      ).sort((a, b) =>
+        a.nombre.localeCompare(b.nombre, "es", { sensitivity: "base" })
+      );
+
       setEspecialidades(uniqueEps);
+
       setSelectedEspecialidad(null);
 
       setEfectores([efector]);
@@ -159,9 +169,12 @@ export default function LookEfeSerEsp({
 
       const uniqueEps = Array.from(
         new Map(epsFromDer.map((x) => [x.id, x])).values()
+      ).sort((a, b) =>
+        a.nombre.localeCompare(b.nombre, "es", { sensitivity: "base" })
       );
 
       setEspecialidades(uniqueEps);
+
       setSelectedEspecialidad(null);
 
       if (derivsForSrv.length > 0) {
