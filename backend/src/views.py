@@ -416,7 +416,23 @@ class TurnoEsperaViewSet(viewsets.ModelViewSet):
         out = TurnoEsperaSerializer(instance, context={"request": request})
 
         return Response(out.data, status=status.HTTP_201_CREATED)
-
+    
+    @action(detail=False, methods=["post"], url_path="close")
+    def close_turno(self, request):
+        id = request.query_params.get("id")
+        turno = self.get_queryset().get(pk=id)
+        serializer = TurnoEsperaCloseSerializer(
+            turno,
+            data={},  # no hace falta pasar nada más
+            context={"request": request},
+            partial=True,
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(
+            TurnoEsperaSerializer(turno, context={"request": request}).data,
+            status=status.HTTP_200_OK
+        )
         
 
 class EstudioRequeridoViewSet(viewsets.ModelViewSet):
