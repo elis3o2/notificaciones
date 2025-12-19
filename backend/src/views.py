@@ -10,6 +10,8 @@ from django.db.models.functions import Coalesce
 from django.conf import settings
 from django.db import connections, DatabaseError
 from django.core.cache import cache
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
 from collections import OrderedDict
 from src.models import (Plantilla,  EstadoMsj, EstadoTurno, Turno, TurnoEspera, Deriva,
                         Mensaje, Efector,Servicio, Especialidad, EfeSerEspPlantilla,
@@ -26,6 +28,12 @@ from src.utils.utils import enviar_whatsapp, fetch_paciente, fetch_profesional
 from src.utils.querys_informix import query_turno_historico_paciente, query_turnos, query_eliminado
 import logging
 logger = logging.getLogger(__name__)
+from django.shortcuts import render
+
+
+def frontend(request):
+    return render(request, "index.html")
+
 
 class PlantillaViewSet(viewsets.ModelViewSet):
     queryset = Plantilla.objects.all()
@@ -441,6 +449,7 @@ class EstudioRequeridoViewSet(viewsets.ModelViewSet):
     
 
 
+@method_decorator(csrf_exempt, name="dispatch")
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
 

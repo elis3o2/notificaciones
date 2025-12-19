@@ -13,3 +13,4 @@ backend/staticfiles/
 .idea
 .mypy_cache
 backend/src/utils/__pycache__
+backend/templates
