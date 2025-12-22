@@ -501,7 +501,7 @@ def send_reminder_task(self, detalles) -> None:
             telefono = ("549" + str(carac_tel) + str(tel)).replace(" ", "")
 
             # Si existe algun TurnoFlow con Flow en estado 0, marcamos reintento
-            if Flow.objects.filter(para=telefono, id_estado_id=0).exists():
+            if Flow.objects.filter(numero=telefono, id_estado_id=0).exists():
                 print(f"[INFO] Existe TurnoFlow con Flow abierto {id_turno}, reintentando luego.")
                 need_retry = True
             else:

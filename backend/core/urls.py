@@ -6,8 +6,6 @@ from src.views import CustomTokenObtainPairView, frontend
 urlpatterns = [
     path("turnos/api/token/", CustomTokenObtainPairView.as_view()),
     path("turnos/api/", include("src.urls")),
-    # Si usas el admin de django:
-    # path("turnos/admin/", admin.site.urls), 
 
     # Catch-all: Cualquier cosa que empiece con /turnos/ y no haya 
     # entrado en las rutas anteriores, se lo enviamos a React.

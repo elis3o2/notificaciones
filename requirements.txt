@@ -33,3 +33,5 @@ JPype1
 jaydebeapi
 aiohttp
 mypy
+whitenoise
+django-vite
