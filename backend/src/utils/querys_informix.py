@@ -155,7 +155,7 @@ def query_turnos(n: int) -> str:
         where_clause = f"WHERE t.idturno IN ({placeholders})"
     return f"""
         SELECT t.idturno, t.idpaciente AS paciente_id, TRIM(per.nombre_per) AS paciente_nombre, TRIM(per.apellido) AS paciente_apellido,
-        per.nro_doc, TRIM(p.nombre) AS nombre_profesional, TRIM(p.apellido) AS apellido_profesional
+        per.nro_doc, TRIM(p.nombre) AS profesional_nombre, TRIM(p.apellido) AS profesional_apellido
         FROM turnos t
         JOIN personalefector pe ON pe.idpersonalefector = t.idpersonalefector
         JOIN personal p ON p.idpersonal = pe.idpersonal
