@@ -55,6 +55,18 @@ INSERT INTO estado_turno(id, nombre) VALUES
 (3, 'REPROGRAMADO'),
 (4, 'FINALIZADO');
 
+INSERT INTO estado_turno_paciente (id, nombre) VALUES
+(-5, 'SERVER ERROR'),
+(-4, 'FALTAN DATOS'),
+(-3, 'NUMERO INVALIDO'),
+(-2, 'SIN WHATSAPP'),
+(-1, 'FALLIDO'),
+(0, 'SIN DATOS'),
+(1, 'CONFIRMADO'),
+(2, 'CANCELADO'),
+(3, 'PERSONA INCORRECTA'),
+(4, 'SIN RESPUESTA');
+
 
 INSERT INTO efector(id, nombre) VALUES
 (1, "HOSPITAL ROQUE SAENZ PEÑA"),

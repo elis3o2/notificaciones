@@ -122,7 +122,6 @@ export default function TurnosPage() {
     if (!filters.efectores || filters.efectores.length === 0) {
       setTurnos([]); setTotal(0); return;
     }
-
     setLoading(true);
     try {
       const offset = (pageToLoad - 1) * pageSize;
@@ -160,7 +159,7 @@ export default function TurnosPage() {
     loadPage({ page, useErrorMode: errorMode, filters: appliedFilters });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, appliedFilters]);
-
+console.log(turnos)
   // ---------- Acción Buscar: aplica filtros UI y ejecuta la consulta ----------
   async function handleBuscar() {
     const newApplied = {
