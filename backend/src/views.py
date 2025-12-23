@@ -569,7 +569,6 @@ class HistoricoPaciente(APIView):
 
         # Serializamos para normalizar salida y que DRF formatee fechas automáticamente
         serializer = HistoricoPacienteSerializer(instance=result, many=True)
-        print(serializer.data)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
@@ -769,13 +768,11 @@ class TurnosMergedAllAPIView(APIView):
         # 3) Consultar Informix igual que tenías, poblar ext_map
         ext_map_asig = {}
         ext_map_elim = {}
-        print(ids_list)
         try:
             with connections['informix'].cursor() as cur:
                 cur.execute(query_turnos(len(ids_list)), ids_list)
                 rows = cur.fetchall()
                 for row in rows:
-                    print(row)
                     turno_id = str(row[0])
                     ext_map_asig[turno_id] = {
                         'paciente_id': row[1],
@@ -806,9 +803,6 @@ class TurnosMergedAllAPIView(APIView):
             logger.exception("Error inesperado consultando Informix")
 
         # 4) Inyectar los campos de Informix como atributos dinámicos sobre cada instancia Turno
-        print(ext_map_asig)
-        print(ext_map_elim)
-        print(local_list)
         for turno in local_list:
             ext_asig = ext_map_asig.get(str(turno.id_sisr), {})
             # si no existe la key, devolvemos None (coherente con tus campos allow_null)
