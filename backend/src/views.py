@@ -687,7 +687,7 @@ class GetIncorrectoAPIView(APIView):
                 setattr(turno, 'profesional_nombre', ext_asig.get('profesional_nombre'))
                 setattr(turno, 'profesional_apellido', ext_asig.get('profesional_apellido'))
 
-            if ext_asig.get('paciente_id') is None:
+            if (ext_asig.get('paciente_id') != turno.id_paciente):
                 pac = fetch_paciente(id_persona=turno.id_paciente)
                 if len(pac) > 0:
                     pac = pac.pop()
@@ -769,11 +769,13 @@ class TurnosMergedAllAPIView(APIView):
         # 3) Consultar Informix igual que tenías, poblar ext_map
         ext_map_asig = {}
         ext_map_elim = {}
+        print(ids_list)
         try:
             with connections['informix'].cursor() as cur:
                 cur.execute(query_turnos(len(ids_list)), ids_list)
                 rows = cur.fetchall()
                 for row in rows:
+                    print(row)
                     turno_id = str(row[0])
                     ext_map_asig[turno_id] = {
                         'paciente_id': row[1],
@@ -804,6 +806,9 @@ class TurnosMergedAllAPIView(APIView):
             logger.exception("Error inesperado consultando Informix")
 
         # 4) Inyectar los campos de Informix como atributos dinámicos sobre cada instancia Turno
+        print(ext_map_asig)
+        print(ext_map_elim)
+        print(local_list)
         for turno in local_list:
             ext_asig = ext_map_asig.get(str(turno.id_sisr), {})
             # si no existe la key, devolvemos None (coherente con tus campos allow_null)
@@ -814,7 +819,7 @@ class TurnosMergedAllAPIView(APIView):
                 setattr(turno, 'profesional_nombre', ext_asig.get('profesional_nombre'))
                 setattr(turno, 'profesional_apellido', ext_asig.get('profesional_apellido'))
             
-            if (ext_asig.get('paciente_id') == None):
+            if (ext_asig.get('paciente_id') != turno.id_paciente):
                 pac = fetch_paciente(id_persona=turno.id_paciente)
                 if len(pac) > 0:
                     pac = pac.pop()
@@ -831,7 +836,6 @@ class TurnosMergedAllAPIView(APIView):
                 setattr(turno, 'paciente_dni', ext_elim.get('paciente_dni'))
                 setattr(turno, 'profesional_nombre', ext_elim.get('profesional_nombre'))
                 setattr(turno, 'profesional_apellido', ext_elim.get('profesional_apellido'))
-
         # 5) Serializar y devolver. Como le pasamos instancias Turno, los campos nested funcionarán.
         serializer = TurnoMergedSerializer(local_list, many=True)
         return Response({"response": serializer.data, "count": total})
@@ -940,7 +944,7 @@ class TurnosAlertasAPIView(APIView):
                     setattr(turno, 'profesional_nombre', ext_asig.get('profesional_nombre'))
                     setattr(turno, 'profesional_apellido', ext_asig.get('profesional_apellido'))
 
-                if (ext_asig.get('paciente_id') is None):
+                if (ext_asig.get('paciente_id') != turno.id_paciente):
                     # fallback a tu función fetch_paciente si la tenés definida
                     try:
                         pac = fetch_paciente(id_persona=turno.id_paciente)
