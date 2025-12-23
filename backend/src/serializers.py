@@ -11,6 +11,7 @@ from src.utils.utils import fetch_paciente, fetch_profesional, update_msg_state
 import re
 from django.utils import timezone
 from datetime import datetime, date
+from concurrent.futures import ThreadPoolExecutor
 
 class PlantillaSerializer(serializers.ModelSerializer):
     contenido = serializers.SerializerMethodField()
@@ -423,6 +424,32 @@ class TurnoMergedSerializer(serializers.ModelSerializer):
             "mensaje_asociado",  
         ]
 
+    def procesar_mensaje(m: Mensaje):
+        if 0 <= m.id_estado_id < 3:
+            update_msg_state(m)
+
+        return {
+            "id": m.id,
+            "id_mensaje": m.id_mensaje,
+            "numero": m.numero if m.numero else None,
+            "fecha_envio": m.fecha_envio if m.fecha_envio else None,
+            "estado": {
+                "id": m.id_estado.id if m.id_estado else None,
+                "significado": m.id_estado.significado if m.id_estado else None,
+            } if m.id_estado else None,
+            "plantilla": {
+                "id": m.id_plantilla.id if m.id_plantilla else None,
+                "contenido": emoji.emojize(m.id_plantilla.contenido)
+                if m.id_plantilla else None,
+                "tipo": {
+                    "id": m.id_plantilla.id_tipo.id,
+                    "nombre": m.id_plantilla.id_tipo.nombre,
+                } if m.id_plantilla and m.id_plantilla.id_tipo else None,
+            } if m.id_plantilla else None,
+            "fecha_last_ack": m.fecha_last_ack if m.fecha_last_ack else None,
+        }
+
+
     def get_mensaje_asociado(self, obj):
         """
         Devuelve la lista de mensajes asociados al turno,
@@ -435,29 +462,8 @@ class TurnoMergedSerializer(serializers.ModelSerializer):
              .order_by("-fecha_envio")
             )
         
-        dic = []
-        for m in mensajes:
-            if m.id_estado_id >= 0 and m.id_estado_id < 3:
-                update_msg_state(m)
-            dic.append({
-                "id": m.id,
-                "id_mensaje": m.id_mensaje,
-                "numero": m.numero if m.numero else None,
-                "fecha_envio": m.fecha_envio if m.fecha_envio else None,
-                "estado": {
-                    "id": m.id_estado.id if m.id_estado else None,
-                    "significado": m.id_estado.significado if m.id_estado else None,
-                } if m.id_estado else None,
-                "plantilla": {
-                    "id": m.id_plantilla.id if m.id_plantilla else None,
-                    "contenido": emoji.emojize(m.id_plantilla.contenido) if m.id_plantilla else None,
-                    "tipo": {
-                        "id": m.id_plantilla.id_tipo.id,
-                        "nombre": m.id_plantilla.id_tipo.nombre,
-                    } if m.id_plantilla.id_tipo else None,
-                } if m.id_plantilla else None,
-                "fecha_last_ack": m.fecha_last_ack if m.fecha_last_ack else None,
-            })
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            dic = list(executor.map(self.procesar_mensaje, mensajes))
         return dic
     
     def get_fecha_estado_paciente(self, obj):
