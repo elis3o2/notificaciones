@@ -536,8 +536,7 @@ def send_reminder_task(self, detalles) -> None:
                     res = enviar_whatsapp(telefono, mensaje)
                 except Exception as ex:
                     print(f"[ERROR] enviar_whatsapp falló para turno {id_turno}: {ex}")
-                    # si querés reintentar por fallo transitorio, podés usar self.retry(exc=ex)
-                    raise
+                    return
 
                 
 
