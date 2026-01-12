@@ -223,6 +223,8 @@ def verificar_turnos() -> None:
                                 if estado == 1:
                                     t.msj_confirmado = 1
                                     t.save(update_fields=["msj_confirmado"])
+                                    create_flow(telefono, t)
+
                                 elif estado == 2:
                                     t.msj_cancelado = 1
                                     t.save(update_fields=["msj_cancelado"])

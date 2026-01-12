@@ -66,6 +66,9 @@ def update_msg_state(mensaje: Mensaje) -> Mensaje:
 
 
 def enviar_whatsapp(numero: str, mensaje: str) -> Response:
+    """
+    Envia el mensaje al numero por la API de whatsapp
+    """
     api_url = config('API_WHATSAPP')
 
     session = requests.Session()
@@ -107,6 +110,10 @@ def enviar_whatsapp(numero: str, mensaje: str) -> Response:
 
     
 def check_turno(efe_ser_esp: int, estado: int) -> (bool, Plantilla | None):
+    """
+    Revisa si el efe_ser_esp tiene la bandera del estado encendida y si es asi
+    devuelve la Plantilla asociada
+    """
     try:
         turno = EfeSerEspPlantilla.objects.filter(
             id_efe_ser_esp=efe_ser_esp,
@@ -231,37 +238,47 @@ def start_flow(numero: str, flowName: str) -> Response:
     port = config('LISTEN_PORT')
     api = config('API_LISTEN')
     endpoint = f"http://localhost:{port}/{api}"
-    # Preparar datos para la API externa (form-data)
-    payload = {
-        "numero": numero,
-        "flowName": flowName,
-        "endpoint": endpoint
-    }
+
+    session = requests.Session()
+    session.trust_env = False  # ← clave
 
     try:
-        # Realizar solicitud a la API externa
-        response = requests.post(api_url, data=payload)
-        
-        # Devolver la respuesta directa del servidor externo
-        # Incluyendo el código de estado y el contenido
-        return Response(
-            data=response.json(),
-            status=response.status_code
+        response = session.post(
+            api_url,
+            json={
+            "numero": numero,
+            "flowName": flowName,
+            "endpoint": endpoint
+            },
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            },
+            timeout=15
         )
-        
-    except requests.exceptions.RequestException as e:
-        # En caso de error de conexión
+
+        content_type = response.headers.get("Content-Type", "")
+
+        if "application/json" in content_type:
+            return Response(response.json(), status=response.status_code)
+
         return Response(
-            {"error": f"No se pudo conectar con el servicio de WhatsApp: {str(e)}"},
-            status=status.HTTP_503_SERVICE_UNAVAILABLE
-        )
-    except ValueError as e:
-        # En caso de que la respuesta no sea JSON válido
-        return Response(
-            {"error": f"Respuesta inválida del servidor: {str(e)}", "raw_response": response.text},
+            {
+                "error": "Respuesta no JSON desde la API WhatsApp",
+                "status_code": response.status_code,
+                "raw_response": response.text[:500]
+            },
             status=status.HTTP_502_BAD_GATEWAY
         )
-    
+
+    except requests.exceptions.RequestException as e:
+        return Response(
+            {"error": "No se pudo conectar con la API WhatsApp", "detail": str(e)},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE
+        )
+
+
+
 
 
 def update_estado_Turno(id_sisr: int, id_pac: int, id_est: int) -> Turno | None: 
@@ -364,6 +381,8 @@ def decode_res(res: Response) -> int:
 
 
 def create_flow(telefono: str, turno: Turno ) -> None:
+    print("CREATE FLOW")
+    print(telefono)
     try:
         res = start_flow(telefono, "confirmacion-turno")
     except Exception as ex:

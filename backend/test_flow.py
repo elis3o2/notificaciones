@@ -19,8 +19,8 @@ res = start_flow(telefono, "confirmacion-turno")
 if res.status_code == 200 and isinstance(res.data, dict):
     body = res.data
     flow_pk = body.get("id")
-    external_flow_name = body.get("flow")  # "confirmar_turno_v1"
-    plantilla = PlantillaFlow.objects.get(pk=1)  # o la instancia que corresponda
+    external_flow_name = body.get("flow") 
+    plantilla = PlantillaFlow.objects.get(pk=1)  
     if flow_pk:
         f, created = Flow.objects.get_or_create(
             pk=flow_pk,
