@@ -354,6 +354,7 @@ def programar_recordatorios() -> None:
             fecha_turno = t_local["fecha"]            # fecha del turno
             hora_turno = t_local["hora"]              # hora del turno
             dias_antes = int(t_local.get("dias_antes") or 0)
+            id = t_local["id"]
 
             # fecha objetivo para el envío (la que determinó el candidato)
             target_date = fecha_turno - timedelta(days=dias_antes)
@@ -427,7 +428,9 @@ def programar_recordatorios() -> None:
             else:
                 eta = send_dt
             try:
-                send_reminder_task.apply_async(args=(list(map(str, r)),), eta=eta)
+                args = list(map(str, r))
+                args.append(str(id))
+                send_reminder_task.apply_async(args=args, eta=eta)
                 print(f"Programado reminder para id_turno={id_turno} en {eta.isoformat()}")
             except Exception as ex:
                 print(f"[ERROR] al programar send_reminder_task para id_turno={id_turno}: {ex}")
@@ -455,7 +458,7 @@ def send_reminder_task(self, detalles) -> None:
             ape_pac, nom_pac, fecha_turno, hora_turno,
             ape_prof, nom_prof, nombre_servicio, nombre_especialidad,
             nombre_efector, calle, altura, letra, coordx, coordy,
-            tel_efe, calle_nom, carac_tel, tel
+            tel_efe, calle_nom, carac_tel, tel, id
         ) = detalles
         
     except Exception as ex:
@@ -470,8 +473,7 @@ def send_reminder_task(self, detalles) -> None:
             turno = (
                 Turno.objects
                 .select_for_update()
-                .filter(id_sisr=id_turno)
-                .first()
+                .get(id=id)
             )
 
             if not turno:
@@ -487,6 +489,10 @@ def send_reminder_task(self, detalles) -> None:
             send_flag, plantilla = check_turno(id_efe_ser_esp, 4)
             if not send_flag or not plantilla:
                 print(f"[DEBUG] check_turno returned send={send_flag}, plantilla={plantilla} for turno {id_turno}")
+                return
+
+            if Mensaje.objects.filter(id_turno=id, id_plantilla__id_tipo__id=4).exists():
+                print(f"[DEBUG] ya se intento enviar el mensaje y falló, abortando")
                 return
 
             # validar teléfono

@@ -173,7 +173,6 @@ class TurnoEspera(models.Model):
     id_efector_solicitante = models.ForeignKey(
         Efector, models.DO_NOTHING, db_column="id_efector_solicitante"
     )
-
     id_efe_ser_esp = models.ForeignKey(
         EfeSerEsp, models.DO_NOTHING, db_column='id_efe_ser_esp'
     )
@@ -200,11 +199,9 @@ class TurnoEspera(models.Model):
     )
     diagnostico = models.CharField(max_length=256,null=True,blank=True)
 
-
     class Meta:
         db_table = 'turno_espera'
         managed = True
-
 
 
 class EfeSerEspPlantilla(models.Model):
@@ -228,7 +225,6 @@ class EfeSerEspPlantilla(models.Model):
     class Meta:
         managed = False
         db_table = 'efe_ser_esp_plantilla'
-
 
 
 class EstudioRequerido(models.Model):
@@ -256,7 +252,6 @@ class CustomUser(AbstractUser):
 
     def __str__(self):
         return self.username
-
 
 
 class RegistroBanderas(models.Model):
@@ -373,6 +368,7 @@ class Flow(models.Model):
         models.DO_NOTHING, 
         db_column='id_estado'
     )
+
     class Meta:
         managed = False
         db_table = 'flow'
@@ -410,7 +406,6 @@ class MsgFlowRec(models.Model):
     class Meta:
         managed = False
         db_table = 'msg_flow_rec'
-
 
 
 class TurnoFlow(models.Model):
