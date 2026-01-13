@@ -443,27 +443,18 @@ def programar_recordatorios() -> None:
 
 # Usa bind=True para poder llamar self.retry()
 @shared_task(bind=True, max_retries=20, default_retry_delay=3600)
-def send_reminder_task(self, detalles) -> None:
-    """
-    detalles: tupla que devuelve make_query 
-    """
+def send_reminder_task(
+    self,
+    id_turno,
+    id_efector, id_servicio, id_especialidad,
+    id_efe_ser_esp, tipo_doc, nro_doc,
+    ape_pac, nom_pac, fecha_turno, hora_turno,
+    ape_prof, nom_prof, nombre_servicio, nombre_especialidad,
+    nombre_efector, calle, altura, letra, coordx, coordy,
+    tel_efe, calle_nom, carac_tel, tel, id
+):
     # seguridad: inicializar ack
     ack = None
-
-    try:
-        (
-            id_turno,
-            id_efector, id_servicio, id_especialidad,
-            id_efe_ser_esp, tipo_doc, nro_doc,
-            ape_pac, nom_pac, fecha_turno, hora_turno,
-            ape_prof, nom_prof, nombre_servicio, nombre_especialidad,
-            nombre_efector, calle, altura, letra, coordx, coordy,
-            tel_efe, calle_nom, carac_tel, tel, id
-        ) = detalles
-        
-    except Exception as ex:
-        print(f"[ERROR] detalles inválidos para turno: {ex}")
-        return
 
     need_retry = False  # bandera para reintentar después del commit
 
