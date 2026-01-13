@@ -158,6 +158,9 @@ export const getTurnoEsperaAbierto = (id: number) :Promise<TurnoEspera[]> =>{
   return http.get<TurnoEspera[]>(`turno_espera/espera/?id_efector=${id}`).then(res => res.data);
 }
 
+export const getTurnoEsperaAbiertoDeriva = (id: number, id_deriva: number) : Promise<TurnoEspera[]> => {
+  return http.get<TurnoEspera[]>(`turno_espera/deriva/?id_efector=${id}&id_deriva=${id_deriva}`).then(res => res.data);
+}
 
 export const postTurnoEspera = (id_efe_ser_esp: number, id_profesional_solicitante: number,
   id_efector_solicitante: number,id_paciente:number, estudio_requerido: number[], prioridad: number, cupo:boolean ) => {
