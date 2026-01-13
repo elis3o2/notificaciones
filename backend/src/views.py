@@ -383,6 +383,24 @@ class TurnoEsperaViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
     
 
+    @action(detail=False, methods=["get"], url_path="deriva")
+    def search_deriva(self, request) -> Response:
+        id_efector = request.query_params.get("id_efector")
+        id_deriva = request.query_params.get("id_deriva")
+
+        queryset = self.get_queryset().filter(id_estado=0)
+
+        if not id_efector or not id_deriva:
+            return Response(
+                    {"detail": "Faltan datos"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+    
+        queryset = queryset.filter(id_efe_ser_esp__id_efector=id_efector, id_efector_solicitante=id_deriva)
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
 
     @action(detail=False, methods=["get"], url_path="paciente")
     def search_paciente(self, request):

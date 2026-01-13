@@ -2,8 +2,9 @@ import  { useContext, useEffect, useMemo, useState } from "react";
 import type { Efector } from "../features/efe_ser_esp/types";
 import type { TurnoEspera } from "../features/turno/types";
 import { AuthContext } from "../common/contex";
-import { getTurnoEsperaAbierto } from "../features/turno/api";
+import { getTurnoEsperaAbierto, getTurnoEsperaAbiertoDeriva } from "../features/turno/api";
 import { CloseTurnoEspera } from "../features/turno/api";
+import {getDerivaByEfector} from "../features/efe_ser_esp/api"
 // MUI
 import {
   Box,
@@ -48,7 +49,8 @@ export default function ListaEspera(): React.ReactElement {
   const [loading, setLoading] = useState(false);
   const [_, setError] = useState<string | null>(null);
   const navigate = useNavigate();
-
+  const [derivaciones, setDerivaciones] = useState<Efector[]>([])
+  const [selectedDerivacion, setSelectedDerivacion] = useState<Efector | null>(null)
   const [sortBy, setSortBy] = useState<SortBy>("priority");
 
   // dialog state
@@ -103,11 +105,101 @@ export default function ListaEspera(): React.ReactElement {
     setSortBy("priority");
   }, [selectedEfector]);
 
+
+  useEffect(() => {
+    if (!selectedEfector) {
+      setDerivaciones([]);
+      setSelectedDerivacion(null);
+      return;
+    }
+
+    const loadDerivaciones = async () => {
+      try {
+        const data = await getDerivaByEfector(selectedEfector.id);
+        const únicos = Array.from(
+          new Map(
+            data.map(d => [d.efector_deriva.id, d.efector_deriva])
+          ).values()
+        );
+
+        setDerivaciones(únicos);
+      } catch (e: any) {
+        const msg = e?.message ?? "Error al obtener derivaciones";
+        setAlertMsg(msg);
+        setAlertSeverity("error");
+        setAlertOpen(true);
+      }
+    };
+
+    loadDerivaciones();
+  }, [selectedEfector]);
+
+  useEffect(() => {
+  if (!selectedEfector) return;
+
+  // Si no hay derivación seleccionada → lista normal
+  if (!selectedDerivacion) {
+    let mounted = true;
+    const fetchTurnos = async () => {
+      if (!selectedEfector) {
+        setTurnos([]);
+        return;
+      }
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await getTurnoEsperaAbierto(selectedEfector.id);
+        if (!mounted) return;
+        setTurnos(data);
+      } catch (e: unknown) {
+        // obtener mensaje sin introducir `any`
+        const msg = (e as { message?: string })?.message ?? "Error al obtener turnos";
+        if (!mounted) return;
+        setError(msg);
+        setTurnos([]);
+        // mostrar alerta
+        setAlertMsg(msg);
+        setAlertSeverity("error");
+        setAlertOpen(true);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    fetchTurnos();
+    return () => {
+      mounted = false;
+    };
+  }
+
+  // Si hay derivación → lista de derivados
+   const loadDerivados = async () => {
+    try {
+      setLoading(true);
+      const data = await getTurnoEsperaAbiertoDeriva(
+        selectedDerivacion.id,
+        selectedEfector.id
+      );
+      setTurnos(data);
+    } catch (e: any) {
+      setAlertMsg(e?.message ?? "Error al obtener turnos derivados");
+      setAlertSeverity("error");
+      setAlertOpen(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  loadDerivados();
+}, [selectedDerivacion]);
+
+
+
+
   const priorityColor = (p: number) => {
     if (p == 2) return "#0baf26ff"; // verde claro (ejemplo)
     if (p == 0) return "#EF4444"; // rojo
     if (p == 1) return "#F59E0B"; // amarillo
-    return "#34D399"; // verde por defecto
   };
 
   const diasEnEsperaNumber = (t: TurnoEspera): number => {
@@ -414,6 +506,42 @@ const telefonoEstado = (carac: string | null | undefined, nro: string | null | u
             </Select>
           </FormControl>
         </Grid>
+        
+        
+        <Grid item xs={12} sm={6} md={3}>
+          <FormControl size="small" fullWidth>
+            <InputLabel id="sort-select-label">Derivación</InputLabel>
+            <Select
+            labelId="derivacion-select-label"
+            value={selectedDerivacion?.id ?? ""}
+            label="Derivacion"
+            onChange={(e) => {
+              const val = e.target.value;
+
+              if (val === null) {
+                // opción "ninguna"
+                setSelectedDerivacion(null);
+              } else {
+                const id = Number(val);
+                const ef = derivaciones.find((x) => x.id === id) ?? null;
+                setSelectedDerivacion(ef);
+              }
+            }}
+          >
+            {/* Opción para no filtrar por derivación */}
+            <MenuItem value="">
+              <em>Ninguna</em>
+            </MenuItem>
+
+            {derivaciones.map((ef) => (
+              <MenuItem key={ef.id} value={ef.id}>
+                {ef.nombre}
+              </MenuItem>
+            ))}
+          </Select>
+
+          </FormControl>
+        </Grid>
       </Grid>
 
       {/* Estado carga / contador */}
@@ -613,8 +741,8 @@ const telefonoEstado = (carac: string | null | undefined, nro: string | null | u
             <Typography>Sin datos</Typography>
           )}
         </DialogContent>
-
         <DialogActions>
+          {(selectedDerivacion === null || activeTurno?.cupo)  &&
               <Button
                 color="error"
                 onClick={handleRemove}
@@ -622,7 +750,7 @@ const telefonoEstado = (carac: string | null | undefined, nro: string | null | u
                 startIcon={isRemoving(activeTurno?.id) ? <CircularProgress size={16} /> : null}
               >
                 Sacar de la lista de espera
-              </Button>
+              </Button>}
 
           <Button onClick={handleCloseDialog}>Cerrar</Button>
         </DialogActions>
